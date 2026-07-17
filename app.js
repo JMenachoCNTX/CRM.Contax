@@ -65,6 +65,7 @@ function switchView(v, btn) {
   document.querySelectorAll('.view').forEach(s => s.classList.remove('active'));
   el("v-" + v).classList.add("active");
   if (v === "presence") renderPresence();
+  if (v === "historial") renderHistorial();
   if (v === "bandeja") renderBandeja();
   if (v === "respuestas") renderRespuestas();
   if (v === "reports") renderReports();
@@ -85,7 +86,7 @@ async function sheetPush(action, item) {
 async function renderRespuestas() {
   const snap = await getDocs(collection(db, "quickReplies"));
   QR = []; snap.forEach(d => QR.push({ id: d.id, ...d.data() }));
-  QR.sort((a, b) => (Number(a.nro) || 999) - (Number(b.nro) || 999));
+  QR.sort((a, b) => (a.category || "General").localeCompare(b.category || "General") || (Number(a.nro) || 9999) - (Number(b.nro) || 9999) || (a.title || "").localeCompare(b.title || ""));
   const cats = [...new Set(QR.map(q => q.category || "General"))];
   const term = qrFilter.toLowerCase();
   const list = QR.filter(q => {
@@ -254,6 +255,31 @@ async function renderPresence() {
     <div class="kpi"><div class="n">${fmtMin(totalToday)}</div><div class="l">Tiempo total hoy</div></div></div>
     <table><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Conectado hoy</th><th>Última conexión</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="note" style="margin-top:12px">El "conectado hoy" se cuenta mientras tienen WhatsApp Web abierto con sesión iniciada en la extensión (aprox., en minutos).</p>`;
+}
+
+// ---------- Historial de presencia (día/semana/mes) ----------
+let histPeriod = 7;
+async function renderHistorial() {
+  await loadAll();
+  const days = [];
+  for (let i = 0; i < histPeriod; i++) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const rows = USERS.map(u => {
+    const dm = u.dailyMinutes || {};
+    const week7 = Object.keys(dm).filter(k => days.includes(k)).reduce((s, k) => s + (Number(dm[k]) || 0), 0);
+    const month = Object.keys(dm).filter(k => k.startsWith(monthKey)).reduce((s, k) => s + (Number(dm[k]) || 0), 0);
+    const cells = days.map(d => `<td style="text-align:center">${dm[d] ? fmtMin(dm[d]) : "·"}</td>`).join("");
+    return `<tr><td>${escape(u.name || u.email)}</td>${cells}<td><b>${fmtMin(week7)}</b></td><td><b>${fmtMin(month)}</b></td></tr>`;
+  }).join("");
+  const dayHeaders = days.map(d => { const dt = new Date(d + "T00:00:00"); return `<th style="text-align:center">${dt.getDate()}/${dt.getMonth() + 1}</th>`; }).join("");
+  el("v-historial").innerHTML = `<h1>Historial de conexión</h1><p class="lead">Tiempo conectado por día para analizar el trabajo del equipo (remoto). Recarga para actualizar.</p>
+    <div style="margin-bottom:14px"><label style="color:var(--muted);font-size:13px;margin-right:8px">Periodo:</label>
+      <select id="h_period" class="mini" style="padding:8px"><option value="7">Últimos 7 días</option><option value="14">Últimos 14 días</option><option value="30">Últimos 30 días</option></select></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Agente</th>${dayHeaders}<th>Periodo</th><th>Este mes</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="3" style="color:var(--muted)">Sin datos aún.</td></tr>'}</tbody></table></div>
+    <p class="note" style="margin-top:12px">Los días se muestran del más reciente al más antiguo. El historial guarda hasta ~2 meses.</p>`;
+  el("h_period").value = String(histPeriod);
+  el("h_period").onchange = () => { histPeriod = Number(el("h_period").value); renderHistorial(); };
 }
 
 // ---------- Reportes ----------
