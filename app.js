@@ -73,7 +73,9 @@ function switchView(v, btn) {
 }
 
 // ---------- Respuestas rápidas (CRUD + Google Sheets) ----------
-let QR = [], qrEditId = null, qrFilter = "";
+let QR = [], qrEditId = null, qrFilter = "", qrCatFilter = "";
+function catHue(s) { s = String(s || "General"); let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
+function catChip(cat) { const h = catHue(cat); return `<span style="background:hsl(${h},60%,90%);color:hsl(${h},70%,30%);padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600">${escape(cat || "General")}</span>`; }
 async function loadConfigDoc() { try { const s = await getDoc(doc(db, "config", "app")); return s.exists() ? s.data() : {}; } catch (e) { return {}; } }
 async function sheetPush(action, item) {
   const cfg = await loadConfigDoc(); const url = (cfg.sheetUrl || "").trim(); if (!url) return;
@@ -84,55 +86,72 @@ async function renderRespuestas() {
   const snap = await getDocs(collection(db, "quickReplies"));
   QR = []; snap.forEach(d => QR.push({ id: d.id, ...d.data() }));
   QR.sort((a, b) => (Number(a.nro) || 999) - (Number(b.nro) || 999));
+  const cats = [...new Set(QR.map(q => q.category || "General"))];
   const term = qrFilter.toLowerCase();
-  const list = QR.filter(q => !term || `${q.title} ${q.text} ${q.category || ""} ${q.description || ""}`.toLowerCase().includes(term));
-  const rows = list.map(q => `<tr>
+  const list = QR.filter(q => {
+    if (qrCatFilter && (q.category || "General") !== qrCatFilter) return false;
+    if (term && !`${q.title} ${q.text} ${q.category || ""} ${q.description || ""}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+  const chips = `<span class="chip ${qrCatFilter === "" ? "on" : ""}" data-c="" style="cursor:pointer;padding:5px 12px;border-radius:20px;font-size:12px;border:1px solid var(--line);${qrCatFilter === "" ? "background:var(--accent);color:#04231c;font-weight:600" : "color:var(--muted)"}">Todas</span>` +
+    cats.map(c => { const h = catHue(c); const on = qrCatFilter === c; return `<span class="chip" data-c="${escape(c)}" style="cursor:pointer;padding:5px 12px;border-radius:20px;font-size:12px;border:1px solid hsl(${h},50%,60%);background:${on ? `hsl(${h},60%,45%)` : `hsl(${h},60%,92%)`};color:${on ? "#fff" : `hsl(${h},70%,28%)`};font-weight:600">${escape(c)}</span>`; }).join("");
+  const rows = list.map(q => {
+    const h = catHue(q.category || "General");
+    return `<tr style="border-left:4px solid hsl(${h},60%,50%)">
     <td>${escape(q.nro || "")}</td>
-    <td>${escape(q.category || "General")}</td>
+    <td>${catChip(q.category)}</td>
     <td><b>${escape(q.title || "")}</b>${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
-    <td style="color:var(--muted)">${escape((q.text || "").slice(0, 70))}${(q.text || "").length > 70 ? "…" : ""}</td>
-    <td><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`).join("");
+    <td style="color:var(--muted)">${escape((q.text || "").slice(0, 60))}${(q.text || "").length > 60 ? "…" : ""}</td>
+    <td style="white-space:nowrap"><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`;
+  }).join("");
   el("v-respuestas").innerHTML = `<h1>Respuestas rápidas</h1><p class="lead">Créalas y edítalas aquí; se comparten con todo el equipo (y con el Google Sheet, si está conectado).</p>
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <input id="qr_search" class="mini" style="padding:8px;min-width:220px" placeholder="🔎 Buscar…" value="${escape(qrFilter)}">
-      <button class="btn" id="qr_new">＋ Nueva</button>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <input id="qr_search" class="mini" style="padding:8px;min-width:220px" placeholder="🔎 Buscar por nombre o texto…" value="${escape(qrFilter)}">
+      <button class="btn" id="qr_new">＋ Nueva respuesta</button>
       <button class="btn sec" id="qr_import" style="border:1px solid var(--line)">⬇️ Importar de Google Sheets</button>
       <span class="msg" id="qr_msg" style="align-self:center"></span>
     </div>
-    <div id="qr_form"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${chips}</div>
+    <p class="note" style="margin:-6px 0 12px">Los filtros son solo para tu vista; no modifican el Google Sheet.</p>
     <table><thead><tr><th>Nro</th><th>Categoría</th><th>Nombre</th><th>Respuesta</th><th></th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin respuestas todavía.</td></tr>'}</tbody></table>`;
+    <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin respuestas con estos filtros.</td></tr>'}</tbody></table>`;
   el("qr_search").oninput = () => { qrFilter = el("qr_search").value; renderRespuestas(); };
-  el("qr_new").onclick = () => showQrForm(null);
+  el("v-respuestas").querySelectorAll(".chip").forEach(c => c.onclick = () => { qrCatFilter = c.dataset.c; renderRespuestas(); });
+  el("qr_new").onclick = () => openQrModal(null);
   el("qr_import").onclick = importFromSheet;
-  el("v-respuestas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => showQrForm(QR.find(x => x.id === b.dataset.edit)));
+  el("v-respuestas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openQrModal(QR.find(x => x.id === b.dataset.edit)));
   el("v-respuestas").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     const q = QR.find(x => x.id === b.dataset.del); if (!q) return;
     await deleteDoc(doc(db, "quickReplies", q.id)); await sheetPush("delete", q); renderRespuestas();
   });
 }
-function showQrForm(q) {
+function openQrModal(q) {
   qrEditId = q ? q.id : null;
-  el("qr_form").innerHTML = `<div class="formcard" style="max-width:640px">
-    <h3 style="margin:0 0 12px">${q ? "Editar" : "Nueva"} respuesta</h3>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:90px"><label>Nro</label><input id="f_nro" value="${escape(q ? q.nro || "" : "")}"></div>
-      <div style="flex:2;min-width:150px"><label>Categoría</label><input id="f_cat" value="${escape(q ? q.category || "" : "")}" placeholder="Ventas"></div>
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:640px;max-width:96vw;max-height:92vh;overflow-y:auto">
+    <h3 style="margin:0 0 16px">${q ? "Editar" : "Nueva"} respuesta</h3>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:100px"><label>Nro</label><input id="f_nro" value="${escape(q ? q.nro || "" : "")}"></div>
+      <div style="flex:2;min-width:160px"><label>Categoría</label><input id="f_cat" value="${escape(q ? q.category || "" : "")}" placeholder="Ventas" list="f_catlist"><datalist id="f_catlist">${[...new Set(QR.map(x => x.category || "General"))].map(c => `<option value="${escape(c)}">`).join("")}</datalist></div>
     </div>
     <label>Nombre de la respuesta</label><input id="f_title" value="${escape(q ? q.title || "" : "")}" placeholder="Saludo">
     <label>Descripción breve</label><input id="f_desc" value="${escape(q ? q.description || "" : "")}" placeholder="De qué trata">
-    <label>Respuesta</label><textarea id="f_text" style="min-height:90px">${escape(q ? q.text || "" : "")}</textarea>
-    <div style="display:flex;gap:8px"><button class="btn" id="f_save">Guardar</button><button class="btn sec" id="f_cancel" style="border:1px solid var(--line)">Cancelar</button></div>
+    <label>Respuesta</label><textarea id="f_text" style="min-height:220px;font-size:14px;line-height:1.5">${escape(q ? q.text || "" : "")}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button class="btn sec" id="f_cancel" style="border:1px solid var(--line)">Cancelar</button><button class="btn" id="f_save">Guardar</button></div>
     <div class="msg" id="f_msg"></div>
   </div>`;
-  el("f_cancel").onclick = () => { el("qr_form").innerHTML = ""; };
-  el("f_save").onclick = async () => {
-    const item = { nro: el("f_nro").value.trim(), category: el("f_cat").value.trim() || "General", title: el("f_title").value.trim(), description: el("f_desc").value.trim(), text: el("f_text").value.trim() };
-    if (!item.title || !item.text) { el("f_msg").className = "msg err"; el("f_msg").textContent = "Completa nombre y respuesta."; return; }
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = (e) => { if (e.target === bg) close(); };
+  bg.querySelector("#f_cancel").onclick = close;
+  bg.querySelector("#f_save").onclick = async () => {
+    const item = { nro: bg.querySelector("#f_nro").value.trim(), category: bg.querySelector("#f_cat").value.trim() || "General", title: bg.querySelector("#f_title").value.trim(), description: bg.querySelector("#f_desc").value.trim(), text: bg.querySelector("#f_text").value.trim() };
+    if (!item.title || !item.text) { bg.querySelector("#f_msg").className = "msg err"; bg.querySelector("#f_msg").textContent = "Completa nombre y respuesta."; return; }
     if (qrEditId) await updateDoc(doc(db, "quickReplies", qrEditId), item);
     else await setDoc(doc(collection(db, "quickReplies")), item);
     await sheetPush("upsert", item);
-    el("qr_form").innerHTML = ""; renderRespuestas();
+    close(); renderRespuestas();
   };
 }
 function importFromSheet() {
@@ -215,18 +234,26 @@ async function renderBandeja() {
 // ---------- Presencia ----------
 function online(u) { if (u.online !== true || !u.lastSeen) return false; const t = Date.parse(u.lastSeen); return !isNaN(t) && (Date.now() - t) < 180000; }
 function timeAgo(iso) { if (!iso) return "nunca"; const t = Date.parse(iso); if (isNaN(t)) return "—"; const s = Math.floor((Date.now() - t) / 1000); if (s < 60) return "hace " + s + "s"; if (s < 3600) return "hace " + Math.floor(s / 60) + " min"; if (s < 86400) return "hace " + Math.floor(s / 3600) + " h"; return new Date(t).toLocaleString("es"); }
+function fmtMin(m) { m = Number(m) || 0; const h = Math.floor(m / 60), mm = m % 60; return h ? (h + "h " + mm + "m") : (mm + "m"); }
 async function renderPresence() {
   await loadAll();
+  const today = new Date().toISOString().slice(0, 10);
   const conn = USERS.filter(online).length;
-  const rows = USERS.map(u => `<tr><td><span class="dot ${online(u) ? "on" : ""}"></span>${escape(u.name || "—")}<div style="color:var(--muted);font-size:12px">${escape(u.email || "")}</div></td>
+  const totalToday = USERS.reduce((s, u) => s + (Number((u.dailyMinutes || {})[today]) || 0), 0);
+  const rows = USERS.map(u => {
+    const mins = Number((u.dailyMinutes || {})[today]) || 0;
+    return `<tr><td><span class="dot ${online(u) ? "on" : ""}"></span>${escape(u.name || "—")}<div style="color:var(--muted);font-size:12px">${escape(u.email || "")}</div></td>
     <td><span class="pill ${u.role}">${u.role}</span></td>
     <td>${online(u) ? '<span style="color:var(--green)">En línea</span>' : 'Desconectado'}</td>
-    <td>${timeAgo(u.lastSeen)}</td></tr>`).join("");
-  el("v-presence").innerHTML = `<h1>Presencia del equipo</h1><p class="lead">Quién está conectado ahora y su última conexión. Se actualiza al recargar.</p>
+    <td><b>${fmtMin(mins)}</b></td>
+    <td>${timeAgo(u.lastSeen)}</td></tr>`;
+  }).join("");
+  el("v-presence").innerHTML = `<h1>Presencia del equipo</h1><p class="lead">Quién está conectado, cuánto tiempo lleva conectado hoy y su última conexión. Recarga para actualizar.</p>
     <div class="kpis"><div class="kpi"><div class="n" style="color:var(--green)">${conn}</div><div class="l">En línea ahora</div></div>
-    <div class="kpi"><div class="n">${USERS.length}</div><div class="l">Usuarios totales</div></div></div>
-    <table><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Última conexión</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note" style="margin-top:12px">Recarga la página para ver el estado más reciente.</p>`;
+    <div class="kpi"><div class="n">${USERS.length}</div><div class="l">Usuarios totales</div></div>
+    <div class="kpi"><div class="n">${fmtMin(totalToday)}</div><div class="l">Tiempo total hoy</div></div></div>
+    <table><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Conectado hoy</th><th>Última conexión</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note" style="margin-top:12px">El "conectado hoy" se cuenta mientras tienen WhatsApp Web abierto con sesión iniciada en la extensión (aprox., en minutos).</p>`;
 }
 
 // ---------- Reportes ----------
