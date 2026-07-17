@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function u() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function role() { return u().role; }
+    function active() { return u().active == true; }
+    function isAdmin() { return isSignedIn() && active() && role() == 'admin'; }
+    function isSup() { return isSignedIn() && active() && (role() == 'admin' || role() == 'supervisor'); }
+    function isAgent() { return isSignedIn() && active() && (role() == 'admin' || role() == 'supervisor' || role() == 'agent'); }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isSup());
+      // Auto-registro: cada quien crea SOLO su propio perfil, como agente y pendiente
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'agent'
+                    && request.resource.data.active == false;
+      // El admin gestiona roles/estado; el propio usuario edita su nombre sin cambiar rol ni estado
+      allow update: if isAdmin()
+                    || (isSignedIn() && request.auth.uid == uid
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.active == resource.data.active);
+      allow delete: if isAdmin();
+    }
+
+    match /contacts/{id} {
+      allow read: if isSup() || (isAgent() && (resource.data.assignedTo == request.auth.uid || resource.data.assignedTo == null));
+      allow create: if isAgent();
+      allow update: if isSup() || (isAgent() && (resource.data.assignedTo == request.auth.uid || resource.data.assignedTo == null));
+      allow delete: if isSup();
+
+      match /notes/{nid} {
+        allow read: if isAgent();
+        allow create: if isAgent() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSup() || (isAgent() && resource.data.authorId == request.auth.uid);
+      }
+    }
+
+    match /quickReplies/{id} {
+      allow read: if isAgent();
+      allow create, update: if isAgent();
+      allow delete: if isSup();
+    }
+
+    match /activity/{id} {
+      allow read: if isSup() || (isAgent() && resource.data.userId == request.auth.uid);
+      allow create: if isAgent() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}
