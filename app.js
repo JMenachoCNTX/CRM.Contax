@@ -72,16 +72,18 @@ function switchView(v, btn) {
 }
 
 // ---------- Bandeja de pendientes ----------
-let bandejaFilter = { status: "", agent: "" };
+let bandejaFilter = { status: "", agent: "", label: "" };
 function statusLabel(s) { return ({ nuevo: "🟢 Nuevo", proceso: "🟡 En proceso", cerrado: "⚪ Cerrado" })[s] || "— sin estado —"; }
 async function renderBandeja() {
   await loadAll();
   const agents = USERS.filter(u => u.active);
+  const allLabels = [...new Set(CHATS.flatMap(c => c.labels || []))].sort();
   const chats = CHATS.map(c => c).filter(c => {
     if (bandejaFilter.status === "pendiente") { if (c.status !== "nuevo" && c.status !== "proceso") return false; }
     else if (bandejaFilter.status && c.status !== bandejaFilter.status) return false;
     if (bandejaFilter.agent === "__none" && c.assignedTo) return false;
     else if (bandejaFilter.agent && bandejaFilter.agent !== "__none" && c.assignedTo !== bandejaFilter.agent) return false;
+    if (bandejaFilter.label && !(c.labels || []).includes(bandejaFilter.label)) return false;
     return true;
   }).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   const rows = chats.map(c => `<tr>
@@ -101,12 +103,16 @@ async function renderBandeja() {
       <select id="b_agent" class="mini" style="padding:8px">
         <option value="">Todos los agentes</option><option value="__none">Sin asignar</option>${agentOpts}
       </select>
+      <select id="b_label" class="mini" style="padding:8px">
+        <option value="">Todas las etiquetas</option>${allLabels.map(l => `<option value="${escape(l)}">${escape(l)}</option>`).join("")}
+      </select>
     </div>
     <table><thead><tr><th>Chat</th><th>Estado</th><th>Atiende</th><th>Etiquetas</th><th>Última actualización</th></tr></thead>
     <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin chats con estos filtros.</td></tr>'}</tbody></table>`;
-  el("b_status").value = bandejaFilter.status; el("b_agent").value = bandejaFilter.agent;
+  el("b_status").value = bandejaFilter.status; el("b_agent").value = bandejaFilter.agent; el("b_label").value = bandejaFilter.label;
   el("b_status").onchange = () => { bandejaFilter.status = el("b_status").value; renderBandeja(); };
   el("b_agent").onchange = () => { bandejaFilter.agent = el("b_agent").value; renderBandeja(); };
+  el("b_label").onchange = () => { bandejaFilter.label = el("b_label").value; renderBandeja(); };
 }
 
 // ---------- Presencia ----------
