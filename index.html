@@ -59,7 +59,7 @@
 
 <div id="login">
   <div class="card">
-    <div class="brand"><svg viewBox="0 0 150 160"><polyline points="78,18 22,80 78,142" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="104,40 62,80 104,120" fill="none" stroke="#808F9E" stroke-width="23"/><polyline points="128,60 96,80 128,100" fill="none" stroke="#0A0A0A" stroke-width="21"/></svg><span>CONTAX CRM</span></div>
+    <div class="brand"><svg viewBox="0 0 150 160"><polyline points="82,14 26,80 82,146" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="105,43 68,80 105,117" fill="none" stroke="#1E2E52" stroke-width="17"/><polygon points="100,80 127,53 127,69 112,80 127,91 127,107" fill="#808F9E"/><polygon points="112,80 127,91 127,107 100,80" fill="#0A0A0A"/></svg><span>CONTAX CRM</span></div>
     <p>Panel de administración</p>
     <input id="email" type="email" placeholder="correo@empresa.com" autocomplete="username" />
     <input id="password" type="password" placeholder="Contraseña / PIN" autocomplete="current-password" />
@@ -70,7 +70,7 @@
 
 <div id="app" class="hidden">
   <header class="top">
-    <div class="brand"><svg viewBox="0 0 150 160"><polyline points="78,18 22,80 78,142" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="104,40 62,80 104,120" fill="none" stroke="#808F9E" stroke-width="23"/><polyline points="128,60 96,80 128,100" fill="none" stroke="#0A0A0A" stroke-width="21"/></svg><span>CONTAX CRM · Admin</span></div>
+    <div class="brand"><svg viewBox="0 0 150 160"><polyline points="82,14 26,80 82,146" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="105,43 68,80 105,117" fill="none" stroke="#1E2E52" stroke-width="17"/><polygon points="100,80 127,53 127,69 112,80 127,91 127,107" fill="#808F9E"/><polygon points="112,80 127,91 127,107 100,80" fill="#0A0A0A"/></svg><span>CONTAX CRM · Admin</span></div>
     <div class="right">
       <span class="who" id="who"></span>
       <button id="themeBtn" title="Claro/oscuro">🌙</button>
@@ -79,12 +79,14 @@
   </header>
   <nav class="tabs">
     <button data-v="presence" class="active">🟢 Presencia</button>
+    <button data-v="bandeja">📥 Bandeja</button>
     <button data-v="reports">📊 Reportes</button>
     <button data-v="users">👥 Usuarios</button>
-    <button data-v="config">⚙️ Configuración (IA)</button>
+    <button data-v="config">⚙️ Configuración</button>
   </nav>
   <main>
     <div class="view active" id="v-presence"></div>
+    <div class="view" id="v-bandeja"></div>
     <div class="view" id="v-reports"></div>
     <div class="view" id="v-users"></div>
     <div class="view" id="v-config"></div>
@@ -94,7 +96,7 @@
 <!-- si entra un agente (no admin) -->
 <div id="agentOnly" class="hidden" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
   <div>
-    <div class="brand" style="font-size:20px;justify-content:center;margin-bottom:10px"><svg viewBox="0 0 150 160" style="width:30px;height:32px"><polyline points="78,18 22,80 78,142" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="104,40 62,80 104,120" fill="none" stroke="#808F9E" stroke-width="23"/><polyline points="128,60 96,80 128,100" fill="none" stroke="#0A0A0A" stroke-width="21"/></svg><span>CONTAX CRM</span></div>
+    <div class="brand" style="font-size:20px;justify-content:center;margin-bottom:10px"><svg viewBox="0 0 150 160" style="width:30px;height:32px"><polyline points="82,14 26,80 82,146" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="105,43 68,80 105,117" fill="none" stroke="#1E2E52" stroke-width="17"/><polygon points="100,80 127,53 127,69 112,80 127,91 127,107" fill="#808F9E"/><polygon points="112,80 127,91 127,107 100,80" fill="#0A0A0A"/></svg><span>CONTAX CRM</span></div>
     <p style="color:var(--muted);max-width:380px">Tu cuenta es de agente. Trabaja desde la <b>extensión</b> en WhatsApp Web. Este panel es solo para administradores.</p>
     <button class="btn sec" id="agentLogout">Cerrar sesión</button>
   </div>

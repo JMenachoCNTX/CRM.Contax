@@ -65,9 +65,48 @@ function switchView(v, btn) {
   document.querySelectorAll('.view').forEach(s => s.classList.remove('active'));
   el("v-" + v).classList.add("active");
   if (v === "presence") renderPresence();
+  if (v === "bandeja") renderBandeja();
   if (v === "reports") renderReports();
   if (v === "users") renderUsers();
   if (v === "config") renderConfig();
+}
+
+// ---------- Bandeja de pendientes ----------
+let bandejaFilter = { status: "", agent: "" };
+function statusLabel(s) { return ({ nuevo: "🟢 Nuevo", proceso: "🟡 En proceso", cerrado: "⚪ Cerrado" })[s] || "— sin estado —"; }
+async function renderBandeja() {
+  await loadAll();
+  const agents = USERS.filter(u => u.active);
+  const chats = CHATS.map(c => c).filter(c => {
+    if (bandejaFilter.status === "pendiente") { if (c.status !== "nuevo" && c.status !== "proceso") return false; }
+    else if (bandejaFilter.status && c.status !== bandejaFilter.status) return false;
+    if (bandejaFilter.agent === "__none" && c.assignedTo) return false;
+    else if (bandejaFilter.agent && bandejaFilter.agent !== "__none" && c.assignedTo !== bandejaFilter.agent) return false;
+    return true;
+  }).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  const rows = chats.map(c => `<tr>
+    <td>${escape(c.title || "—")}</td>
+    <td>${statusLabel(c.status)}</td>
+    <td>${c.assignedToName ? escape(c.assignedToName) : '<span style="color:var(--muted)">sin asignar</span>'}</td>
+    <td>${(c.labels || []).map(t => `<span class="pill" style="background:rgba(127,191,224,.14);color:#8fc4e8">${escape(t)}</span>`).join(" ")}</td>
+    <td>${c.updatedAt ? new Date(Date.parse(c.updatedAt)).toLocaleString("es") : "—"}</td></tr>`).join("");
+  const agentOpts = agents.map(u => `<option value="${u.uid}">${escape(u.name || u.email)}</option>`).join("");
+  el("v-bandeja").innerHTML = `<h1>Bandeja de chats</h1><p class="lead">Todos los chats que el equipo ha marcado, para que nada quede sin responder.</p>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <select id="b_status" class="mini" style="padding:8px">
+        <option value="">Todos los estados</option>
+        <option value="pendiente">Solo pendientes</option>
+        <option value="nuevo">Nuevo</option><option value="proceso">En proceso</option><option value="cerrado">Cerrado</option>
+      </select>
+      <select id="b_agent" class="mini" style="padding:8px">
+        <option value="">Todos los agentes</option><option value="__none">Sin asignar</option>${agentOpts}
+      </select>
+    </div>
+    <table><thead><tr><th>Chat</th><th>Estado</th><th>Atiende</th><th>Etiquetas</th><th>Última actualización</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin chats con estos filtros.</td></tr>'}</tbody></table>`;
+  el("b_status").value = bandejaFilter.status; el("b_agent").value = bandejaFilter.agent;
+  el("b_status").onchange = () => { bandejaFilter.status = el("b_status").value; renderBandeja(); };
+  el("b_agent").onchange = () => { bandejaFilter.agent = el("b_agent").value; renderBandeja(); };
 }
 
 // ---------- Presencia ----------
@@ -154,27 +193,62 @@ async function renderUsers() {
 }
 
 // ---------- Configuración IA ----------
+const AI_MODELS = {
+  deepseek: [["deepseek-chat", "deepseek-chat (recomendado)"], ["deepseek-reasoner", "deepseek-reasoner (razonamiento)"]],
+  gemini: [["gemini-2.0-flash", "gemini-2.0-flash (recomendado)"], ["gemini-1.5-flash", "gemini-1.5-flash"], ["gemini-2.5-flash", "gemini-2.5-flash"]]
+};
+const AI_HELP = {
+  deepseek: 'Consigue tu clave en <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--green)">platform.deepseek.com</a> (crea cuenta, agrega saldo — es muy barato — y crea una API key). Empieza con <code>sk-</code>.',
+  gemini: 'Consigue tu clave gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--green)">aistudio.google.com/app/apikey</a>. Empieza con <code>AIza</code>.'
+};
 async function renderConfig() {
   let cfg = {};
   try { const s = await getDoc(doc(db, "config", "app")); if (s.exists()) cfg = s.data(); } catch (e) {}
-  el("v-config").innerHTML = `<h1>Configuración de IA</h1><p class="lead">Pon la clave UNA vez aquí y funciona para TODO el equipo. Nadie más tiene que configurar nada.</p>
+  const provider = cfg.provider || (cfg.geminiKey ? "gemini" : "deepseek");
+  const curKey = cfg.aiKey || cfg.geminiKey || "";
+  const curModel = cfg.aiModel || cfg.geminiModel || "";
+  el("v-config").innerHTML = `<h1>Configuración de IA</h1><p class="lead">Elige el proveedor y pon la clave UNA vez aquí. Funciona para TODO el equipo; nadie más configura nada.</p>
     <div class="formcard">
-      <label>Clave de IA (Google Gemini)</label>
-      <input id="c_key" type="password" placeholder="AIza..." value="${escape(cfg.geminiKey || "")}">
-      <label>Modelo</label>
-      <select id="c_model">
-        <option value="gemini-2.0-flash">gemini-2.0-flash (recomendado)</option>
-        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+      <label>Proveedor de IA</label>
+      <select id="c_provider">
+        <option value="deepseek">DeepSeek (barato)</option>
+        <option value="gemini">Google Gemini (gratis)</option>
       </select>
-      <button class="btn" id="c_save">Guardar clave</button>
+      <label>Clave (API key)</label>
+      <input id="c_key" type="password" placeholder="Pega aquí tu clave" value="${escape(curKey)}">
+      <label>Modelo</label>
+      <select id="c_model"></select>
+      <button class="btn" id="c_save">Guardar</button>
       <div class="msg" id="c_msg"></div>
-      <p class="note" style="margin-top:10px">¿Cómo consigo la clave? Entra a <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--green)">aistudio.google.com/app/apikey</a>, crea una y pégala aquí.</p>
+      <p class="note" id="c_help" style="margin-top:10px"></p>
+    </div>
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">Datos de la empresa</h3>
+      <p class="note" style="margin:0 0 12px">El nombre se usa en la variable <code>{empresa}</code> de las respuestas rápidas.</p>
+      <label>Nombre de la empresa</label>
+      <input id="c_company" placeholder="Ej. CONTAX" value="${escape(cfg.company || "")}">
+      <button class="btn" id="c_csave">Guardar empresa</button>
+      <div class="msg" id="c_cmsg"></div>
     </div>`;
-  if (cfg.geminiModel) el("c_model").value = cfg.geminiModel;
+  const provSel = el("c_provider"); provSel.value = provider;
+  function fillModels() {
+    const p = provSel.value;
+    el("c_model").innerHTML = AI_MODELS[p].map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+    if (curModel && AI_MODELS[p].some(m => m[0] === curModel)) el("c_model").value = curModel;
+    el("c_help").innerHTML = AI_HELP[p];
+  }
+  fillModels();
+  provSel.onchange = fillModels;
   el("c_save").onclick = async () => {
     const msg = el("c_msg"); msg.className = "msg"; msg.textContent = "Guardando…";
-    try { await setDoc(doc(db, "config", "app"), { geminiKey: el("c_key").value.trim(), geminiModel: el("c_model").value, updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Guardado. La IA ya funciona para todo el equipo."; }
+    try {
+      await setDoc(doc(db, "config", "app"), { provider: provSel.value, aiKey: el("c_key").value.trim(), aiModel: el("c_model").value, updatedAt: serverTimestamp() }, { merge: true });
+      msg.className = "msg ok"; msg.textContent = "✓ Guardado. La IA ya funciona para todo el equipo.";
+    } catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_csave").onclick = async () => {
+    const msg = el("c_cmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    try { await setDoc(doc(db, "config", "app"), { company: el("c_company").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Empresa guardada."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
 }
