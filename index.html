@@ -3,276 +3,103 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CRM · Panel de atención</title>
+<title>CONTAX CRM · Administración</title>
 <style>
-  :root{
-    --bg:#0b141a; --panel:#111b21; --panel2:#182229; --line:#233138;
-    --txt:#e9edef; --muted:#8696a0; --green:#25d366; --green2:#128c7e;
-    --accent:#00a884; --danger:#f15c6d; --warn:#f0b429; --radius:12px;
-  }
+  :root{--bg:#0b141a;--panel:#111b21;--panel2:#182229;--line:#233138;--txt:#e9edef;--muted:#8696a0;--accent:#00a884;--green:#25d366;--navy:#1E2E52;--danger:#f15c6d;--warn:#f0b429}
+  html.light{--bg:#eef1f5;--panel:#ffffff;--panel2:#f5f7f9;--line:#e2e5ea;--txt:#111b21;--muted:#667781;--green:#0a7d5a}
   *{box-sizing:border-box}
-  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
-       background:var(--bg);color:var(--txt);height:100vh;overflow:hidden}
+  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
   button{font-family:inherit;cursor:pointer;border:none;border-radius:8px}
-  input,textarea,select{font-family:inherit}
-  .hidden{display:none !important}
+  input,select{font-family:inherit}
+  .hidden{display:none!important}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand svg{width:30px;height:32px}
 
-  /* ---------- Login ---------- */
-  #login{display:flex;align-items:center;justify-content:center;height:100vh}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-        padding:32px;width:360px;max-width:90vw}
-  .card h1{margin:0 0 4px;font-size:20px}
-  .card p{color:var(--muted);margin:0 0 20px;font-size:13px}
-  .card input{width:100%;padding:12px;margin-bottom:12px;background:var(--panel2);
-        border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px}
-  .btn-primary{width:100%;padding:12px;background:var(--accent);color:#04231c;
-        font-weight:600;font-size:14px}
-  .btn-primary:hover{background:var(--green)}
-  .link{color:var(--accent);background:none;font-size:13px;margin-top:12px;width:100%}
+  #login{display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:30px;width:360px;max-width:92vw}
+  .card .brand{font-size:20px;justify-content:center;margin-bottom:4px}
+  .card p{color:var(--muted);font-size:13px;text-align:center;margin:0 0 20px}
+  .card input{width:100%;padding:12px;margin-bottom:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px}
+  .btn{background:var(--accent);color:#04231c;font-weight:600;font-size:14px;padding:12px 16px;border-radius:8px}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.block{width:100%}
+  .btn.sec{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
   .msg{font-size:13px;margin-top:10px;min-height:18px}
   .msg.err{color:var(--danger)} .msg.ok{color:var(--green)}
 
-  /* ---------- App shell ---------- */
-  #app{display:grid;grid-template-columns:64px 320px 1fr;height:100vh}
-  .rail{background:var(--panel);border-right:1px solid var(--line);
-        display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:8px}
-  .rail button{width:44px;height:44px;background:transparent;color:var(--muted);
-        font-size:18px;border-radius:10px;display:flex;align-items:center;justify-content:center}
-  .rail button.active,.rail button:hover{background:var(--panel2);color:var(--green)}
-  .rail .spacer{flex:1}
-  .avatar{width:38px;height:38px;border-radius:50%;background:var(--green2);
-        color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
-
-  .list{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
-  .list header{padding:14px 16px;border-bottom:1px solid var(--line)}
-  .list header h2{margin:0;font-size:16px}
-  .toolbar{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-  .toolbar input,.toolbar select{background:var(--panel2);border:1px solid var(--line);
-        color:var(--txt);border-radius:8px;padding:8px;font-size:13px;flex:1;min-width:0}
-  .toolbar button{background:var(--accent);color:#04231c;padding:8px 12px;font-weight:600;font-size:13px}
-  .items{flex:1;overflow-y:auto}
-  .item{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}
-  .item:hover{background:var(--panel2)} .item.sel{background:var(--panel2)}
-  .item .row1{display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .item .name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .item .phone{color:var(--muted);font-size:12px}
-  .badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
-  .badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
-  .badge.status-nuevo{background:#1f3a2e;color:var(--green);border-color:#1f3a2e}
-  .badge.status-proceso{background:#3a331f;color:var(--warn);border-color:#3a331f}
-  .badge.status-cerrado{background:#2a2f33;color:var(--muted)}
-  .badge.assign{background:#20303a;color:#7fbfe0;border-color:#20303a}
-
-  /* ---------- Detail ---------- */
-  .detail{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
-  .detail .empty{margin:auto;color:var(--muted);text-align:center;padding:40px}
-  .dhead{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);
-        display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-  .dhead h2{margin:0;font-size:17px}
-  .dhead .sub{color:var(--muted);font-size:13px;margin-top:2px}
-  .dhead .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-  .dhead select,.dhead a.wa{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
-        border-radius:8px;padding:7px 10px;font-size:13px;text-decoration:none}
-  .dhead a.wa{background:var(--green2);color:#fff;font-weight:600;display:inline-flex;align-items:center;gap:6px}
-  .dbody{flex:1;overflow-y:auto;padding:18px 20px;display:grid;gap:18px}
-  .section{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-  .section h3{margin:0 0 12px;font-size:14px;color:var(--txt);display:flex;align-items:center;gap:8px}
-  .section h3 .tag{margin-left:auto;font-size:11px;color:var(--muted);font-weight:400}
-
-  .notes{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;margin-bottom:10px}
-  .note{background:var(--panel2);border-radius:8px;padding:8px 10px;font-size:13px}
-  .note .meta{color:var(--muted);font-size:11px;margin-top:4px}
-  .composer{display:flex;gap:8px}
-  .composer textarea{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
-        border-radius:8px;padding:10px;font-size:13px;resize:vertical;min-height:46px}
-  .composer button{background:var(--accent);color:#04231c;font-weight:600;padding:0 16px}
-
-  /* AI panel */
-  .ai-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-  .ai-tools button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
-        padding:7px 12px;font-size:12px}
-  .ai-tools button:hover{border-color:var(--accent);color:var(--green)}
-  .ai-io textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
-        border-radius:8px;padding:10px;font-size:13px;resize:vertical;min-height:70px}
-  .ai-out{margin-top:10px;background:#0e1f1a;border:1px solid #12352b;border-radius:8px;padding:12px;
-        font-size:13px;white-space:pre-wrap;min-height:20px;color:#d7f5ea}
-  .ai-out .copy{margin-top:8px;background:var(--accent);color:#04231c;padding:6px 12px;font-size:12px;font-weight:600}
-  .row-inline{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
-  .row-inline label{font-size:12px;color:var(--muted)}
-  .row-inline select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px}
-  .quick-list{display:flex;flex-wrap:wrap;gap:6px}
-  .quick{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:6px 10px;
-        font-size:12px;border-radius:20px}
-  .quick:hover{border-color:var(--accent)}
-
-  /* ---------- Views (equipo / reportes) ---------- */
-  .view{padding:24px;overflow-y:auto;height:100vh}
-  .view h1{font-size:20px;margin:0 0 4px}
-  .view .lead{color:var(--muted);margin:0 0 20px;font-size:13px}
+  header.top{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:10}
+  header.top .brand{font-size:17px}
+  header.top .right{display:flex;align-items:center;gap:10px}
+  header.top .who{color:var(--muted);font-size:13px}
+  header.top button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:8px 12px;font-size:13px}
+  nav.tabs{display:flex;gap:4px;padding:12px 24px 0;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  nav.tabs button{background:none;color:var(--muted);padding:10px 16px;border-bottom:2px solid transparent;font-size:14px}
+  nav.tabs button.active{color:var(--accent);border-bottom-color:var(--accent)}
+  main{padding:24px;max-width:1100px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}.lead{color:var(--muted);margin:0 0 20px;font-size:13px}
+  .view{display:none}.view.active{display:block}
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
-  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.3px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--muted)}
+  .dot.on{background:var(--green);box-shadow:0 0 6px var(--green)}
   .pill{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
-  .pill.admin{background:#3a1f2e;color:#f19bb0} .pill.supervisor{background:#1f2f3a;color:#8fc4e8}
-  .pill.agent{background:#1f3a2e;color:var(--green)}
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:24px}
-  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-  .kpi .n{font-size:26px;font-weight:700} .kpi .l{color:var(--muted);font-size:12px;margin-top:4px}
-  .mini-btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:5px 10px;font-size:12px;border-radius:6px}
-  select.role-sel{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:5px}
-
-  /* modal */
-  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
-  .modal{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px;width:400px;max-width:92vw}
-  .modal h3{margin:0 0 16px}
-  .modal input,.modal select,.modal textarea{width:100%;padding:10px;margin-bottom:12px;background:var(--panel2);
-        border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px}
-  .modal .actions{display:flex;gap:8px;justify-content:flex-end}
-  .modal .actions .cancel{background:var(--panel2);color:var(--txt);padding:10px 16px}
-  .modal .actions .ok{background:var(--accent);color:#04231c;font-weight:600;padding:10px 16px}
-  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);
-        border-top-color:var(--green);border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px}
-  @keyframes s{to{transform:rotate(360deg)}}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);
-        border:1px solid var(--line);padding:12px 20px;border-radius:8px;font-size:13px;z-index:60;opacity:0;transition:.3s}
-  .toast.show{opacity:1}
+  .pill.admin{background:rgba(241,92,109,.15);color:#f19bb0}.pill.supervisor{background:rgba(127,191,224,.15);color:#8fc4e8}.pill.agent{background:rgba(37,211,102,.15);color:var(--green)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .kpi .n{font-size:26px;font-weight:700}.kpi .l{color:var(--muted);font-size:12px;margin-top:4px}
+  .formcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:18px;max-width:520px}
+  .formcard label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .formcard input,.formcard select{width:100%;padding:10px;margin-bottom:14px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px}
+  .note{color:var(--muted);font-size:12px;line-height:1.5}
+  .mini{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:5px 10px;font-size:12px;border-radius:6px}
 </style>
 </head>
 <body>
 
-<!-- ================= LOGIN ================= -->
 <div id="login">
   <div class="card">
-    <h1>CRM · Atención</h1>
-    <p id="loginSub">Inicia sesión con la cuenta de tu equipo</p>
+    <div class="brand"><svg viewBox="0 0 150 160"><polyline points="78,18 22,80 78,142" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="104,40 62,80 104,120" fill="none" stroke="#808F9E" stroke-width="23"/><polyline points="128,60 96,80 128,100" fill="none" stroke="#0A0A0A" stroke-width="21"/></svg><span>CONTAX CRM</span></div>
+    <p>Panel de administración</p>
     <input id="email" type="email" placeholder="correo@empresa.com" autocomplete="username" />
-    <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" />
-    <input id="name" type="text" placeholder="Tu nombre (solo al registrarte)" class="hidden" />
-    <button class="btn-primary" id="loginBtn">Entrar</button>
-    <button class="link" id="toggleMode">¿No tienes cuenta? Regístrate</button>
+    <input id="password" type="password" placeholder="Contraseña / PIN" autocomplete="current-password" />
+    <button class="btn block" id="loginBtn">Entrar</button>
     <div class="msg" id="loginMsg"></div>
   </div>
 </div>
 
-<!-- ================= APP ================= -->
 <div id="app" class="hidden">
-  <!-- Rail -->
-  <div class="rail">
-    <button data-view="chats" class="active" title="Chats">💬</button>
-    <button data-view="reports" title="Reportes" id="navReports">📊</button>
-    <button data-view="team" title="Equipo" id="navTeam">👥</button>
-    <button data-view="quick" title="Respuestas rápidas">⚡</button>
-    <div class="spacer"></div>
-    <div class="avatar" id="myAvatar" title="Mi cuenta">–</div>
-    <button id="logoutBtn" title="Salir">⎋</button>
-  </div>
-
-  <!-- Chats view: list + detail -->
-  <div id="view-chats" style="display:contents">
-    <div class="list">
-      <header><h2>Chats / Contactos</h2></header>
-      <div class="toolbar">
-        <input id="search" placeholder="Buscar nombre o teléfono…" />
-        <button id="newContact" title="Nuevo contacto">＋</button>
-      </div>
-      <div class="toolbar" style="border-top:none;padding-top:0">
-        <select id="filterStatus">
-          <option value="">Todos los estados</option>
-          <option value="nuevo">Nuevo</option>
-          <option value="proceso">En proceso</option>
-          <option value="cerrado">Cerrado</option>
-        </select>
-        <select id="filterAssign">
-          <option value="">Todos los agentes</option>
-          <option value="__me">Asignados a mí</option>
-          <option value="__none">Sin asignar</option>
-        </select>
-      </div>
-      <div class="items" id="contactList"></div>
+  <header class="top">
+    <div class="brand"><svg viewBox="0 0 150 160"><polyline points="78,18 22,80 78,142" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="104,40 62,80 104,120" fill="none" stroke="#808F9E" stroke-width="23"/><polyline points="128,60 96,80 128,100" fill="none" stroke="#0A0A0A" stroke-width="21"/></svg><span>CONTAX CRM · Admin</span></div>
+    <div class="right">
+      <span class="who" id="who"></span>
+      <button id="themeBtn" title="Claro/oscuro">🌙</button>
+      <button id="logoutBtn">Salir</button>
     </div>
-
-    <div class="detail" id="detail">
-      <div class="empty" id="detailEmpty">Selecciona un contacto para ver sus herramientas.</div>
-      <div id="detailContent" class="hidden" style="display:flex;flex-direction:column;height:100%">
-        <div class="dhead">
-          <div>
-            <h2 id="dName">—</h2>
-            <div class="sub" id="dSub">—</div>
-          </div>
-          <div class="controls">
-            <select id="dStatus" title="Estado">
-              <option value="nuevo">Nuevo</option>
-              <option value="proceso">En proceso</option>
-              <option value="cerrado">Cerrado</option>
-            </select>
-            <select id="dAssign" title="Asignar a"></select>
-            <a class="wa" id="dWhats" target="_blank" rel="noopener">Abrir en WhatsApp</a>
-          </div>
-        </div>
-
-        <div class="dbody">
-          <!-- Asistente de IA -->
-          <div class="section">
-            <h3>🤖 Asistente de IA <span class="tag">te ayuda a ti · nunca envía solo</span></h3>
-            <div class="ai-tools">
-              <button data-ai="improve">✍️ Mejorar mi mensaje</button>
-              <button data-ai="suggest">💡 Sugerir respuestas</button>
-              <button data-ai="summarize">📋 Resumir conversación</button>
-              <button data-ai="classify">🏷️ Clasificar</button>
-              <button data-ai="translate">🌐 Traducir</button>
-            </div>
-            <div class="row-inline">
-              <label>Tono:</label>
-              <select id="aiTone">
-                <option value="cordial y profesional">Cordial y profesional</option>
-                <option value="cercano y amable">Cercano y amable</option>
-                <option value="formal">Formal</option>
-                <option value="breve y directo">Breve y directo</option>
-              </select>
-              <label>Traducir a:</label>
-              <select id="aiLang">
-                <option value="inglés">Inglés</option>
-                <option value="portugués">Portugués</option>
-                <option value="español">Español</option>
-              </select>
-            </div>
-            <div class="ai-io">
-              <textarea id="aiInput" placeholder="Escribe aquí tu borrador (o pega el mensaje del cliente) y elige una herramienta arriba…"></textarea>
-              <div class="ai-out" id="aiOutput">Aquí aparecerá la ayuda de la IA. Tú revisas y envías manualmente.</div>
-            </div>
-          </div>
-
-          <!-- Respuestas rápidas -->
-          <div class="section">
-            <h3>⚡ Respuestas rápidas <span class="tag">clic para copiar</span></h3>
-            <div class="quick-list" id="quickList"></div>
-          </div>
-
-          <!-- Notas / bitácora -->
-          <div class="section">
-            <h3>🗒️ Notas y bitácora del contacto</h3>
-            <div class="notes" id="notesList"></div>
-            <div class="composer">
-              <textarea id="noteInput" placeholder="Agregar nota interna o registrar qué se atendió…"></textarea>
-              <button id="addNote">Guardar</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Reports view -->
-  <div id="view-reports" class="view hidden" style="grid-column:2 / 4"></div>
-  <!-- Team view -->
-  <div id="view-team" class="view hidden" style="grid-column:2 / 4"></div>
-  <!-- Quick replies admin view -->
-  <div id="view-quick" class="view hidden" style="grid-column:2 / 4"></div>
+  </header>
+  <nav class="tabs">
+    <button data-v="presence" class="active">🟢 Presencia</button>
+    <button data-v="reports">📊 Reportes</button>
+    <button data-v="users">👥 Usuarios</button>
+    <button data-v="config">⚙️ Configuración (IA)</button>
+  </nav>
+  <main>
+    <div class="view active" id="v-presence"></div>
+    <div class="view" id="v-reports"></div>
+    <div class="view" id="v-users"></div>
+    <div class="view" id="v-config"></div>
+  </main>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- si entra un agente (no admin) -->
+<div id="agentOnly" class="hidden" style="min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div>
+    <div class="brand" style="font-size:20px;justify-content:center;margin-bottom:10px"><svg viewBox="0 0 150 160" style="width:30px;height:32px"><polyline points="78,18 22,80 78,142" fill="none" stroke="#1E2E52" stroke-width="27"/><polyline points="104,40 62,80 104,120" fill="none" stroke="#808F9E" stroke-width="23"/><polyline points="128,60 96,80 128,100" fill="none" stroke="#0A0A0A" stroke-width="21"/></svg><span>CONTAX CRM</span></div>
+    <p style="color:var(--muted);max-width:380px">Tu cuenta es de agente. Trabaja desde la <b>extensión</b> en WhatsApp Web. Este panel es solo para administradores.</p>
+    <button class="btn sec" id="agentLogout">Cerrar sesión</button>
+  </div>
+</div>
 
-<!-- Configuración: edita config.js con los datos de tu proyecto Firebase -->
 <script src="config.js"></script>
 <script type="module" src="app.js"></script>
 </body>
