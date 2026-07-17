@@ -66,9 +66,106 @@ function switchView(v, btn) {
   el("v-" + v).classList.add("active");
   if (v === "presence") renderPresence();
   if (v === "bandeja") renderBandeja();
+  if (v === "respuestas") renderRespuestas();
   if (v === "reports") renderReports();
   if (v === "users") renderUsers();
   if (v === "config") renderConfig();
+}
+
+// ---------- Respuestas rápidas (CRUD + Google Sheets) ----------
+let QR = [], qrEditId = null, qrFilter = "";
+async function loadConfigDoc() { try { const s = await getDoc(doc(db, "config", "app")); return s.exists() ? s.data() : {}; } catch (e) { return {}; } }
+async function sheetPush(action, item) {
+  const cfg = await loadConfigDoc(); const url = (cfg.sheetUrl || "").trim(); if (!url) return;
+  const payload = { action, item: { categoria: item.category || "", nombre: item.title || "", nro: item.nro || "", titulo: item.description || "", respuesta: item.text || "" } };
+  try { await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) }); } catch (e) {}
+}
+async function renderRespuestas() {
+  const snap = await getDocs(collection(db, "quickReplies"));
+  QR = []; snap.forEach(d => QR.push({ id: d.id, ...d.data() }));
+  QR.sort((a, b) => (Number(a.nro) || 999) - (Number(b.nro) || 999));
+  const term = qrFilter.toLowerCase();
+  const list = QR.filter(q => !term || `${q.title} ${q.text} ${q.category || ""} ${q.description || ""}`.toLowerCase().includes(term));
+  const rows = list.map(q => `<tr>
+    <td>${escape(q.nro || "")}</td>
+    <td>${escape(q.category || "General")}</td>
+    <td><b>${escape(q.title || "")}</b>${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
+    <td style="color:var(--muted)">${escape((q.text || "").slice(0, 70))}${(q.text || "").length > 70 ? "…" : ""}</td>
+    <td><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`).join("");
+  el("v-respuestas").innerHTML = `<h1>Respuestas rápidas</h1><p class="lead">Créalas y edítalas aquí; se comparten con todo el equipo (y con el Google Sheet, si está conectado).</p>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <input id="qr_search" class="mini" style="padding:8px;min-width:220px" placeholder="🔎 Buscar…" value="${escape(qrFilter)}">
+      <button class="btn" id="qr_new">＋ Nueva</button>
+      <button class="btn sec" id="qr_import" style="border:1px solid var(--line)">⬇️ Importar de Google Sheets</button>
+      <span class="msg" id="qr_msg" style="align-self:center"></span>
+    </div>
+    <div id="qr_form"></div>
+    <table><thead><tr><th>Nro</th><th>Categoría</th><th>Nombre</th><th>Respuesta</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin respuestas todavía.</td></tr>'}</tbody></table>`;
+  el("qr_search").oninput = () => { qrFilter = el("qr_search").value; renderRespuestas(); };
+  el("qr_new").onclick = () => showQrForm(null);
+  el("qr_import").onclick = importFromSheet;
+  el("v-respuestas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => showQrForm(QR.find(x => x.id === b.dataset.edit)));
+  el("v-respuestas").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const q = QR.find(x => x.id === b.dataset.del); if (!q) return;
+    await deleteDoc(doc(db, "quickReplies", q.id)); await sheetPush("delete", q); renderRespuestas();
+  });
+}
+function showQrForm(q) {
+  qrEditId = q ? q.id : null;
+  el("qr_form").innerHTML = `<div class="formcard" style="max-width:640px">
+    <h3 style="margin:0 0 12px">${q ? "Editar" : "Nueva"} respuesta</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:90px"><label>Nro</label><input id="f_nro" value="${escape(q ? q.nro || "" : "")}"></div>
+      <div style="flex:2;min-width:150px"><label>Categoría</label><input id="f_cat" value="${escape(q ? q.category || "" : "")}" placeholder="Ventas"></div>
+    </div>
+    <label>Nombre de la respuesta</label><input id="f_title" value="${escape(q ? q.title || "" : "")}" placeholder="Saludo">
+    <label>Descripción breve</label><input id="f_desc" value="${escape(q ? q.description || "" : "")}" placeholder="De qué trata">
+    <label>Respuesta</label><textarea id="f_text" style="min-height:90px">${escape(q ? q.text || "" : "")}</textarea>
+    <div style="display:flex;gap:8px"><button class="btn" id="f_save">Guardar</button><button class="btn sec" id="f_cancel" style="border:1px solid var(--line)">Cancelar</button></div>
+    <div class="msg" id="f_msg"></div>
+  </div>`;
+  el("f_cancel").onclick = () => { el("qr_form").innerHTML = ""; };
+  el("f_save").onclick = async () => {
+    const item = { nro: el("f_nro").value.trim(), category: el("f_cat").value.trim() || "General", title: el("f_title").value.trim(), description: el("f_desc").value.trim(), text: el("f_text").value.trim() };
+    if (!item.title || !item.text) { el("f_msg").className = "msg err"; el("f_msg").textContent = "Completa nombre y respuesta."; return; }
+    if (qrEditId) await updateDoc(doc(db, "quickReplies", qrEditId), item);
+    else await setDoc(doc(collection(db, "quickReplies")), item);
+    await sheetPush("upsert", item);
+    el("qr_form").innerHTML = ""; renderRespuestas();
+  };
+}
+function importFromSheet() {
+  const msg = el("qr_msg"); msg.className = "msg";
+  loadConfigDoc().then(cfg => {
+    const url = (cfg.sheetUrl || "").trim();
+    if (!url) { msg.className = "msg err"; msg.textContent = "Primero pon la URL del puente en ⚙️ Configuración."; return; }
+    msg.textContent = "Importando…";
+    const cb = "cxcb_" + Math.abs(url.length);
+    const sep = url.indexOf("?") >= 0 ? "&" : "?";
+    const s = document.createElement("script");
+    window[cb] = async (data) => {
+      try {
+        const rows = (data && data.rows) || [];
+        let n = 0;
+        for (const r of rows) {
+          const title = (r.nombre || "").toString().trim(); const text = (r.respuesta || "").toString().trim();
+          if (!title && !text) continue;
+          const item = { nro: (r.nro || "").toString(), category: (r.categoria || "General").toString().trim() || "General", title, description: (r.titulo || "").toString().trim(), text };
+          const existing = QR.find(x => (x.title || "").trim() === title && (x.category || "") === item.category);
+          if (existing) await updateDoc(doc(db, "quickReplies", existing.id), item);
+          else await setDoc(doc(collection(db, "quickReplies")), item);
+          n++;
+        }
+        msg.className = "msg ok"; msg.textContent = `✓ ${n} respuestas importadas.`;
+        renderRespuestas();
+      } catch (e) { msg.className = "msg err"; msg.textContent = "Error al importar: " + (e.message || e); }
+      finally { delete window[cb]; s.remove(); }
+    };
+    s.src = url + sep + "callback=" + cb;
+    s.onerror = () => { msg.className = "msg err"; msg.textContent = "No se pudo leer el Sheet. Revisa la URL del puente."; s.remove(); };
+    document.body.appendChild(s);
+  });
 }
 
 // ---------- Bandeja de pendientes ----------
@@ -235,6 +332,16 @@ async function renderConfig() {
       <input id="c_company" placeholder="Ej. CONTAX" value="${escape(cfg.company || "")}">
       <button class="btn" id="c_csave">Guardar empresa</button>
       <div class="msg" id="c_cmsg"></div>
+    </div>
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">Google Sheets (respuestas)</h3>
+      <p class="note" style="margin:0 0 12px">Pega la URL del "puente" (Apps Script) para conectar tus respuestas con tu Google Sheet.
+      Sigue la guía <b>GUIA-GOOGLE-SHEETS.md</b>. Con esto: importas tu hoja, y todo lo que se cree/edite se
+      guarda también en el Sheet.</p>
+      <label>URL del puente de Google Sheets (…/exec)</label>
+      <input id="c_sheet" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.sheetUrl || "")}">
+      <button class="btn" id="c_ssave">Guardar URL</button>
+      <div class="msg" id="c_smsg"></div>
     </div>`;
   const provSel = el("c_provider"); provSel.value = provider;
   function fillModels() {
@@ -255,6 +362,11 @@ async function renderConfig() {
   el("c_csave").onclick = async () => {
     const msg = el("c_cmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
     try { await setDoc(doc(db, "config", "app"), { company: el("c_company").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Empresa guardada."; }
+    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_ssave").onclick = async () => {
+    const msg = el("c_smsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    try { await setDoc(doc(db, "config", "app"), { sheetUrl: el("c_sheet").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
 }
