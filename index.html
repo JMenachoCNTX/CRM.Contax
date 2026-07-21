@@ -53,6 +53,20 @@
   .formcard input,.formcard select{width:100%;padding:10px;margin-bottom:14px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:14px}
   .note{color:var(--muted);font-size:12px;line-height:1.5}
   .mini{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:5px 10px;font-size:12px;border-radius:6px}
+  .badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+  .badge.ok{background:rgba(37,211,102,.15);color:var(--green)}
+  .badge.off{background:rgba(240,180,41,.16);color:var(--warn)}
+  .badge.mut{background:rgba(134,150,160,.16);color:var(--muted)}
+  .clienterow:hover{background:var(--panel2)}
+  .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%;padding:9px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:13px;font-family:inherit}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+  .fs{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
+  .reveal{cursor:pointer;user-select:none}
+  @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -78,15 +92,17 @@
     </div>
   </header>
   <nav class="tabs">
-    <button data-v="presence" class="active">🟢 Presencia</button>
-    <button data-v="historial">📆 Historial</button>
-    <button data-v="bandeja">📥 Bandeja</button>
-    <button data-v="respuestas">⚡ Respuestas</button>
-    <button data-v="reports">📊 Reportes</button>
-    <button data-v="users">👥 Usuarios</button>
-    <button data-v="config">⚙️ Configuración</button>
+    <button data-v="clientes" data-grp="portal">🗂️ Clientes</button>
+    <button data-v="presence" data-grp="crm" class="active">🟢 Presencia</button>
+    <button data-v="historial" data-grp="crm">📆 Historial</button>
+    <button data-v="bandeja" data-grp="crm">📥 Bandeja</button>
+    <button data-v="respuestas" data-grp="crm">⚡ Respuestas</button>
+    <button data-v="reports" data-grp="crm">📊 Reportes</button>
+    <button data-v="users" data-grp="admin">👥 Usuarios</button>
+    <button data-v="config" data-grp="admin">⚙️ Configuración</button>
   </nav>
   <main>
+    <div class="view" id="v-clientes"></div>
     <div class="view active" id="v-presence"></div>
     <div class="view" id="v-historial"></div>
     <div class="view" id="v-bandeja"></div>
