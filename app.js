@@ -38,19 +38,41 @@ function traducir(c) { return ({ "auth/invalid-credential": "Correo o contraseñ
 el("logoutBtn").onclick = () => signOut(auth);
 el("agentLogout").onclick = () => signOut(auth);
 
+// ---------- Roles y permisos del portal ----------
+// groups: 'portal' (Clientes…) · 'crm' (Presencia/Bandeja/Respuestas/Reportes) · 'admin' (Usuarios/Config)
+// clientes: 'edit' = crear/editar · 'view' = solo lectura
+const ROLE_ACCESS = {
+  admin:      { groups: ["portal", "crm", "admin"], clientes: "edit" },
+  supervisor: { groups: ["portal", "crm", "admin"], clientes: "edit" },
+  editor:     { groups: ["portal"], clientes: "edit" },
+  cajero:     { groups: ["portal"], clientes: "edit" },
+  lector:     { groups: ["portal"], clientes: "view" }
+};
+function myAccess() { return ROLE_ACCESS[ME && ME.role] || null; }
+function canEditClientes() { const a = myAccess(); return !!a && a.clientes === "edit"; }
+
 onAuthStateChanged(auth, async (user) => {
   if (!user) { el("login").classList.remove("hidden"); el("app").classList.add("hidden"); el("agentOnly").classList.add("hidden"); return; }
   const snap = await getDoc(doc(db, "users", user.uid));
   if (!snap.exists()) { el("loginMsg").className = "msg err"; el("loginMsg").textContent = "Sin perfil."; await signOut(auth); return; }
   ME = { uid: user.uid, ...snap.data() };
-  const isAdmin = ME.role === "admin" || ME.role === "supervisor";
+  const access = myAccess();
   el("login").classList.add("hidden");
-  if (!isAdmin || ME.active !== true) { el("agentOnly").classList.remove("hidden"); el("app").classList.add("hidden"); return; }
+  // Sin acceso al portal (agente de la extensión, o rol desconocido, o inactivo) → pantalla de agente
+  if (!access || ME.active !== true) { el("agentOnly").classList.remove("hidden"); el("app").classList.add("hidden"); return; }
   el("agentOnly").classList.add("hidden"); el("app").classList.remove("hidden");
   el("who").textContent = `${ME.name || ME.email} · ${ME.role}`;
   initTheme();
-  document.querySelectorAll('nav.tabs button').forEach(b => b.onclick = () => switchView(b.dataset.v, b));
-  await loadAll(); renderPresence();
+  // Mostrar solo las pestañas que el rol puede ver; elegir la primera visible como activa
+  let first = null;
+  document.querySelectorAll('nav.tabs button').forEach(b => {
+    const ok = access.groups.includes(b.dataset.grp);
+    b.classList.toggle("hidden", !ok);
+    b.classList.remove("active");
+    b.onclick = () => switchView(b.dataset.v, b);
+    if (ok && !first) first = b;
+  });
+  if (first) switchView(first.dataset.v, first);
 });
 
 async function loadAll() {
@@ -64,6 +86,7 @@ function switchView(v, btn) {
   if (btn) btn.classList.add('active');
   document.querySelectorAll('.view').forEach(s => s.classList.remove('active'));
   el("v-" + v).classList.add("active");
+  if (v === "clientes") renderClientes();
   if (v === "presence") renderPresence();
   if (v === "historial") renderHistorial();
   if (v === "bandeja") renderBandeja();
@@ -422,6 +445,274 @@ async function renderConfig() {
     try { await setDoc(doc(db, "config", "app"), { sheetUrl: el("c_sheet").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
+}
+
+// ============================================================
+//  MÓDULO CLIENTES (Portal) — base de datos BDCONTAX en Firebase
+// ============================================================
+let CLIENTES = [], cliFilter = "", cliEstado = "", cliTipo = "";
+
+// Campos del cliente (clave interna, etiqueta, grupo, tipo)
+const CLI_FIELDS = [
+  ["codigoId", "Código ID", "Cliente", "text"],
+  ["nit", "NIT", "Cliente", "text"],
+  ["nombre", "Nombre o Razón Social", "Cliente", "text"],
+  ["telefono", "Teléfono", "Cliente", "text"],
+  ["correo", "Correo electrónico", "Cliente", "text"],
+  ["tipoContribuyente", "Tipo de contribuyente", "Actividad", "text"],
+  ["actividadPrincipal", "Actividad principal", "Actividad", "text"],
+  ["actividadSecundaria", "Actividad secundaria", "Actividad", "text"],
+  ["brindaServiciosA", "Brinda servicios a", "Actividad", "text"],
+  ["fechaAperturaNit", "Fecha apertura NIT", "Actividad", "text"],
+  ["usuario", "Usuario (impuestos)", "Actividad", "text"],
+  ["password", "Contraseña (impuestos)", "Actividad", "secret"],
+  ["passwordSiat", "Contraseña SIAT", "Actividad", "secret"],
+  ["inicioCapital", "Inicio de capital", "SEPREC", "text"],
+  ["estadoMatricula", "Estado de la matrícula SEPREC", "SEPREC", "text"],
+  ["correoSeprec", "Correo SEPREC", "SEPREC", "text"],
+  ["usuarioSeprec", "Usuario SEPREC", "SEPREC", "text"],
+  ["passwordSeprec", "Contraseña SEPREC", "SEPREC", "secret"],
+  ["contratosServicio", "Contratos de servicio", "Adicionales", "text"],
+  ["estadoUsuario", "Estado del cliente", "Adicionales", "estado"],
+  ["costoMensual", "Costo servicio mensual (Bs)", "Adicionales", "text"],
+  ["fileUrl", "Carpeta / archivos (Drive URL)", "Adicionales", "text"],
+  ["comentarios", "Comentarios", "Adicionales", "textarea"]
+];
+const CLI_GROUPS = ["Cliente", "Actividad", "SEPREC", "Adicionales"];
+
+function cliIsActivo(c) { return /^activo/i.test(String(c.estadoUsuario || "").trim()); }
+function cliMoney(v) {
+  let s = String(v == null ? "" : v).replace(/\s/g, "");
+  s = s.replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".").replace(/[^\d.]/g, "");
+  const n = parseFloat(s); return isNaN(n) ? 0 : n;
+}
+function fmtBs(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+
+async function loadClientes() {
+  CLIENTES = [];
+  try { (await getDocs(collection(db, "clientes"))).forEach(d => CLIENTES.push({ id: d.id, ...d.data() })); } catch (e) {}
+  CLIENTES.sort((a, b) => (Number(a.codigoId) || 9e9) - (Number(b.codigoId) || 9e9) || String(a.nombre || "").localeCompare(String(b.nombre || "")));
+}
+
+async function renderClientes() {
+  await loadClientes();
+  const canEdit = canEditClientes();
+  const isAdmin = ME.role === "admin";
+  const term = cliFilter.toLowerCase().trim();
+  const tipos = [...new Set(CLIENTES.map(c => (c.tipoContribuyente || "").trim()).filter(Boolean))].sort();
+  const estados = [...new Set(CLIENTES.map(c => (c.estadoUsuario || "").trim()).filter(Boolean))].sort();
+  const list = CLIENTES.filter(c => {
+    if (cliEstado === "__activo" && !cliIsActivo(c)) return false;
+    if (cliEstado === "__inactivo" && cliIsActivo(c)) return false;
+    if (cliEstado && cliEstado.indexOf("__") !== 0 && (c.estadoUsuario || "").trim() !== cliEstado) return false;
+    if (cliTipo && (c.tipoContribuyente || "").trim() !== cliTipo) return false;
+    if (term && !`${c.codigoId} ${c.nit} ${c.nombre} ${c.telefono} ${c.correo} ${c.actividadPrincipal}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+  const total = CLIENTES.length;
+  const activos = CLIENTES.filter(cliIsActivo).length;
+  const ingreso = CLIENTES.filter(cliIsActivo).reduce((s, c) => s + cliMoney(c.costoMensual), 0);
+
+  const rows = list.map(c => `<tr class="clienterow" data-open="${c.id}" style="cursor:pointer">
+    <td>${escape(c.codigoId || "—")}</td>
+    <td><b>${escape(c.nombre || "—")}</b>${c.nit ? `<div style="color:var(--muted);font-size:12px">NIT ${escape(c.nit)}</div>` : ""}</td>
+    <td>${escape(c.telefono || "—")}</td>
+    <td>${escape((c.tipoContribuyente || "—"))}</td>
+    <td><span class="badge ${cliIsActivo(c) ? "ok" : "off"}">${escape(c.estadoUsuario || "—")}</span></td>
+    <td style="text-align:right">${c.costoMensual ? escape(String(c.costoMensual)) : "—"}</td>
+    <td style="white-space:nowrap" data-stop="1">
+      <button class="mini" data-edit="${c.id}">${canEdit ? "Editar" : "Ver"}</button>
+      ${isAdmin ? `<button class="mini" data-del="${c.id}">Borrar</button>` : ""}
+    </td></tr>`).join("");
+
+  el("v-clientes").innerHTML = `<h1>Clientes</h1>
+    <p class="lead">Tu base de datos de clientes (BDCONTAX), guardada en Firebase y compartida con tu equipo según su rol.</p>
+    <div class="kpis">
+      <div class="kpi"><div class="n">${total}</div><div class="l">Clientes registrados</div></div>
+      <div class="kpi"><div class="n" style="color:var(--green)">${activos}</div><div class="l">Activos</div></div>
+      <div class="kpi"><div class="n" style="color:var(--warn)">${total - activos}</div><div class="l">Inactivos</div></div>
+      <div class="kpi"><div class="n">${fmtBs(ingreso)}</div><div class="l">Ingreso mensual (activos)</div></div>
+    </div>
+    <div class="toolbar">
+      <input id="cli_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar por nombre, NIT, código, teléfono…" value="${escape(cliFilter)}">
+      <select id="cli_estado" class="mini" style="padding:9px">
+        <option value="">Todos los estados</option>
+        <option value="__activo">Solo activos</option>
+        <option value="__inactivo">Solo inactivos</option>
+        ${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}
+      </select>
+      <select id="cli_tipo" class="mini" style="padding:9px">
+        <option value="">Todos los tipos</option>
+        ${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}
+      </select>
+      ${canEdit ? '<button class="btn" id="cli_new">＋ Nuevo cliente</button>' : ""}
+      ${canEdit ? '<button class="btn sec" id="cli_import" style="border:1px solid var(--line)">⬇️ Importar CSV</button>' : ""}
+      <button class="btn sec" id="cli_export" style="border:1px solid var(--line)">⬆️ Exportar CSV</button>
+      <span class="msg" id="cli_msg" style="align-self:center"></span>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Código</th><th>Cliente</th><th>Teléfono</th><th>Tipo</th><th>Estado</th><th style="text-align:right">Costo/mes</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted)">${total ? "Sin clientes con estos filtros." : "Aún no hay clientes. Usa “Importar CSV” para cargar tu base, o “＋ Nuevo cliente”."}</td></tr>`}</tbody>
+    </table></div>
+    <p class="note" style="margin-top:10px">Mostrando ${list.length} de ${total}. Toca una fila para ver la ficha completa.</p>`;
+
+  el("cli_search").oninput = () => { cliFilter = el("cli_search").value; renderClientes(); };
+  el("cli_estado").value = cliEstado; el("cli_estado").onchange = () => { cliEstado = el("cli_estado").value; renderClientes(); };
+  el("cli_tipo").value = cliTipo; el("cli_tipo").onchange = () => { cliTipo = el("cli_tipo").value; renderClientes(); };
+  if (el("cli_new")) el("cli_new").onclick = () => openClienteModal(null);
+  if (el("cli_import")) el("cli_import").onclick = importClientesCSV;
+  el("cli_export").onclick = exportClientesCSV;
+  el("v-clientes").querySelectorAll("[data-edit]").forEach(b => b.onclick = (e) => { e.stopPropagation(); openClienteModal(CLIENTES.find(x => x.id === b.dataset.edit)); });
+  el("v-clientes").querySelectorAll("[data-del]").forEach(b => b.onclick = (e) => { e.stopPropagation(); delCliente(CLIENTES.find(x => x.id === b.dataset.del)); });
+  el("v-clientes").querySelectorAll("[data-open]").forEach(r => r.onclick = () => openClienteModal(CLIENTES.find(x => x.id === r.dataset.open)));
+}
+
+function openClienteModal(c) {
+  const canEdit = canEditClientes();
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const groupsHtml = CLI_GROUPS.map(g => {
+    const fields = CLI_FIELDS.filter(f => f[2] === g);
+    const inputs = fields.map(([key, label, , type]) => {
+      const val = escape(c ? (c[key] != null ? c[key] : "") : "");
+      const dis = canEdit ? "" : "disabled";
+      if (type === "textarea") return `<div class="field" style="grid-column:1/-1"><label>${label}</label><textarea id="cf_${key}" style="min-height:70px" ${dis}>${val}</textarea></div>`;
+      if (type === "secret") return `<div class="field"><label>${label}</label><input id="cf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="cf_${key}" style="font-size:11px">👁 mostrar</span></div>`;
+      if (type === "estado") return `<div class="field"><label>${label}</label><input id="cf_${key}" value="${val}" list="cf_estlist" placeholder="ACTIVO" ${dis}></div>`;
+      return `<div class="field"><label>${label}</label><input id="cf_${key}" value="${val}" ${dis}></div>`;
+    }).join("");
+    return `<div class="fs">${g}</div><div class="grid2">${inputs}</div>`;
+  }).join("");
+  const estOpts = [...new Set(CLIENTES.map(x => (x.estadoUsuario || "").trim()).filter(Boolean))];
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">${c ? (canEdit ? "Editar cliente" : "Ficha del cliente") : "Nuevo cliente"}</h3>
+      <button class="mini" id="cf_x">✕</button>
+    </div>
+    <datalist id="cf_estlist">${estOpts.map(e => `<option value="${escape(e)}">`).join("")}</datalist>
+    ${groupsHtml}
+    ${c && c.fileUrl ? `<div class="note" style="margin-top:10px">📁 <a href="${escape(c.fileUrl)}" target="_blank" style="color:var(--green)">Abrir carpeta de archivos</a></div>` : ""}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="btn sec" id="cf_cancel" style="border:1px solid var(--line)">Cerrar</button>
+      ${canEdit ? '<button class="btn" id="cf_save">Guardar</button>' : ""}
+    </div>
+    <div class="msg" id="cf_msg"></div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = (e) => { if (e.target === bg) close(); };
+  bg.querySelector("#cf_x").onclick = close;
+  bg.querySelector("#cf_cancel").onclick = close;
+  bg.querySelectorAll("[data-rev]").forEach(s => s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "👁 mostrar" : "🙈 ocultar"; } });
+  const saveBtn = bg.querySelector("#cf_save");
+  if (saveBtn) saveBtn.onclick = async () => {
+    const data = {};
+    CLI_FIELDS.forEach(([key]) => { const i = bg.querySelector("#cf_" + key); data[key] = i ? i.value.trim() : ""; });
+    const msg = bg.querySelector("#cf_msg"); msg.className = "msg";
+    if (!data.nombre) { msg.className = "msg err"; msg.textContent = "El nombre o razón social es obligatorio."; return; }
+    saveBtn.disabled = true; msg.textContent = "Guardando…";
+    data.updatedAt = serverTimestamp();
+    try {
+      if (c) { await updateDoc(doc(db, "clientes", c.id), data); }
+      else {
+        data.createdAt = serverTimestamp(); data.createdBy = ME.uid;
+        const id = data.codigoId ? ("id" + String(data.codigoId).replace(/[^\w-]/g, "")) : null;
+        if (id) await setDoc(doc(db, "clientes", id), data, { merge: true });
+        else await setDoc(doc(collection(db, "clientes")), data);
+      }
+      close(); renderClientes();
+    } catch (e) { msg.className = "msg err"; saveBtn.disabled = false; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+}
+
+async function delCliente(c) {
+  if (!c) return;
+  if (!confirm(`¿Eliminar al cliente "${c.nombre || c.codigoId}"?\nEsta acción no se puede deshacer.`)) return;
+  try { await deleteDoc(doc(db, "clientes", c.id)); renderClientes(); }
+  catch (e) { const m = el("cli_msg"); if (m) { m.className = "msg err"; m.textContent = "Error al borrar: " + (e.code || e.message); } }
+}
+
+// ---------- CSV: parser robusto (comillas, comas y saltos de línea) ----------
+function parseCSV(text) {
+  const rows = []; let row = [], field = "", i = 0, q = false;
+  text = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  while (i < text.length) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+      else field += ch;
+    } else {
+      if (ch === '"') q = true;
+      else if (ch === ",") { row.push(field); field = ""; }
+      else if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+      else field += ch;
+    }
+    i++;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+// mapea encabezado → clave interna
+function headerToKey(h) {
+  const raw = String(h || "").trim();
+  const m = raw.match(/^\s*(\d+)\s*[.\-)]/);
+  const byNum = { 1: "codigoId", 2: "nit", 3: "nombre", 4: "telefono", 5: "correo", 6: "tipoContribuyente", 7: "actividadPrincipal", 8: "actividadSecundaria", 9: "brindaServiciosA", 10: "fechaAperturaNit", 11: "usuario", 12: "password", 13: "inicioCapital", 14: "estadoMatricula", 15: "correoSeprec", 16: "passwordSeprec", 17: "usuarioSeprec", 18: "contratosServicio", 19: "comentarios", 20: "estadoUsuario", 21: "costoMensual", 22: "fileUrl" };
+  if (m && byNum[m[1]]) return byNum[m[1]];
+  const n = raw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (n.includes("siat")) return "passwordSiat";
+  if (n === "nombre" || n.includes("razon social")) return "nombre";
+  if (n.includes("codigo")) return "codigoId";
+  if (n === "nit") return "nit";
+  if (n.includes("telefono")) return "telefono";
+  if (n.includes("correo") && n.includes("seprec")) return "correoSeprec";
+  if (n.includes("correo")) return "correo";
+  if (n.includes("estado") && n.includes("usuario")) return "estadoUsuario";
+  if (n.includes("costo")) return "costoMensual";
+  return null;
+}
+function importClientesCSV() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = ".csv,text/csv,text/plain";
+  inp.onchange = () => {
+    const file = inp.files[0]; if (!file) return;
+    const rd = new FileReader();
+    rd.onload = async () => {
+      const msg = el("cli_msg"); msg.className = "msg";
+      try {
+        const rows = parseCSV(String(rd.result)).filter(r => r.some(x => (x || "").trim() !== ""));
+        if (rows.length < 2) { msg.className = "msg err"; msg.textContent = "El archivo no tiene datos."; return; }
+        const header = rows[0].map(headerToKey);
+        if (!header.includes("nombre")) { msg.className = "msg err"; msg.textContent = "No encontré la columna de Nombre/Razón Social. ¿Exportaste la hoja BDCONTAX con sus encabezados?"; return; }
+        const existingByCode = {}; CLIENTES.forEach(c => { if (c.codigoId) existingByCode[String(c.codigoId)] = c; });
+        let ok = 0, skip = 0;
+        for (let r = 1; r < rows.length; r++) {
+          const rowArr = rows[r]; const data = {};
+          header.forEach((k, idx) => { if (k) data[k] = (rowArr[idx] || "").trim(); });
+          if (!data.nombre) { skip++; continue; }
+          data.updatedAt = serverTimestamp();
+          msg.className = "msg"; msg.textContent = `Importando ${ok + 1}… (no cierres la pestaña)`;
+          const code = (data.codigoId || "").replace(/[^\w-]/g, "");
+          const id = code ? ("id" + code) : null;
+          if (id) await setDoc(doc(db, "clientes", id), data, { merge: true });
+          else await setDoc(doc(collection(db, "clientes")), data);
+          ok++;
+        }
+        msg.className = "msg ok"; msg.textContent = `✓ ${ok} clientes importados${skip ? ` · ${skip} filas sin nombre omitidas` : ""}.`;
+        renderClientes();
+      } catch (e) { msg.className = "msg err"; msg.textContent = "Error al importar: " + (e.message || e); }
+    };
+    rd.readAsText(file, "UTF-8");
+  };
+  inp.click();
+}
+function exportClientesCSV() {
+  const cols = CLI_FIELDS.map(f => f[0]);
+  const labels = CLI_FIELDS.map(f => f[1]);
+  const esc = v => { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [labels.map(esc).join(",")];
+  CLIENTES.forEach(c => lines.push(cols.map(k => esc(c[k])).join(",")));
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "clientes-contax.csv"; a.click(); URL.revokeObjectURL(a.href);
 }
 
 function escape(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
