@@ -3,7 +3,7 @@
 //  Presencia · Reportes · Crear usuarios (correo+PIN) · Clave de IA
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 if (!window.APP_CONFIG || !window.APP_CONFIG.firebase) {
@@ -435,10 +435,11 @@ async function renderUsers() {
   const rows = USERS.map(u => {
     const pin = PINS[u.uid] || "";
     const pinCell = isAdmin
-      ? `<div style="display:flex;gap:5px;align-items:center">
+      ? `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
            <input class="mini pin-in" data-uid="${u.uid}" type="password" value="${escape(pin)}" placeholder="—" style="width:110px">
            <span class="reveal mini pin-eye" data-uid="${u.uid}" title="Mostrar/ocultar">👁️</span>
-           <button class="mini pin-save" data-uid="${u.uid}">Guardar</button>
+           <button class="mini pin-save" data-uid="${u.uid}" title="Solo anota el PIN aquí (no cambia la contraseña)">Anotar</button>
+           <button class="mini pin-reset" data-uid="${u.uid}" data-email="${escape(u.email || "")}" title="Enviar correo para cambiar la contraseña de verdad">🔑 Restablecer</button>
          </div>`
       : `<span style="color:var(--muted)">—</span>`;
     return `<tr>
@@ -463,7 +464,11 @@ async function renderUsers() {
       <p class="note" style="margin-top:8px">El usuario queda activo al instante. Comparte con esa persona su correo y PIN para que entre a la extensión.</p>
     </div>
     <table><thead><tr><th>Usuario</th><th>Rol</th><th>PIN / Contraseña</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    ${isAdmin ? '<p class="note" style="margin-top:12px">🔒 El PIN se guarda en una caja privada que <b>solo el admin</b> puede ver, para recordarlo si alguien lo olvida. Firebase no permite leer la contraseña real, así que este campo es tu propio registro: al crear un usuario se guarda solo, y aquí puedes anotarlo o corregirlo. Si el equipo cambia su contraseña por otro medio, actualízala aquí.</p>' : ""}`;
+    ${isAdmin ? `<div class="note" style="margin-top:12px;line-height:1.6">
+      🔒 <b>PIN / Contraseña</b> = tu <b>cuaderno privado</b> (solo lo ve el admin). Firebase cifra la contraseña real y nadie la puede leer, así que aquí solo la <b>anotas</b> para recordarla. <b>Anotar NO cambia la contraseña.</b><br>
+      🔑 <b>¿Alguien olvidó su contraseña?</b> Toca <b>Restablecer</b>: le llega un correo a esa cuenta con un enlace para poner una nueva. Cuando la ponga, anótala aquí con el 👁️ para tenerla a mano.<br>
+      <span style="color:var(--muted)">Nota: para crear usuarios nuevos, el PIN que escribes sí es el de acceso desde el inicio. El problema es solo con los usuarios viejos cuya contraseña ya nadie recuerda.</span>
+    </div>` : ""}`;
 
   el("u_create").onclick = async () => {
     const name = el("u_name").value.trim(), email = el("u_email").value.trim(), pin = el("u_pin").value, role = el("u_role").value;
@@ -490,8 +495,16 @@ async function renderUsers() {
     const uid = b.dataset.uid, i = el("v-users").querySelector(`.pin-in[data-uid="${uid}"]`);
     const u = USERS.find(x => x.uid === uid) || {};
     b.disabled = true; b.textContent = "…";
-    try { await setDoc(doc(db, "userPins", uid), { pin: i.value, email: u.email || "", updatedAt: serverTimestamp() }, { merge: true }); b.textContent = "✓"; setTimeout(() => { b.textContent = "Guardar"; b.disabled = false; }, 1200); }
+    try { await setDoc(doc(db, "userPins", uid), { pin: i.value, email: u.email || "", updatedAt: serverTimestamp() }, { merge: true }); b.textContent = "✓"; setTimeout(() => { b.textContent = "Anotar"; b.disabled = false; }, 1200); }
     catch (e) { b.textContent = "Error"; b.disabled = false; }
+  });
+  document.querySelectorAll(".pin-reset").forEach(b => b.onclick = async () => {
+    const email = b.dataset.email;
+    if (!email) { alert("Ese usuario no tiene correo registrado."); return; }
+    if (!confirm(`Se enviará un correo a:\n${email}\n\ncon un enlace para poner una nueva contraseña. La persona (o quien tenga acceso a ese correo) debe abrirlo y elegir la nueva contraseña.\n\n¿Enviar ahora?`)) return;
+    b.disabled = true; const o = b.textContent; b.textContent = "Enviando…";
+    try { await sendPasswordResetEmail(auth, email); b.textContent = "✓ Enviado"; setTimeout(() => { b.textContent = o; b.disabled = false; }, 2500); }
+    catch (e) { b.textContent = "Error"; b.disabled = false; alert("No se pudo enviar: " + (e.code || e.message)); }
   });
 }
 
