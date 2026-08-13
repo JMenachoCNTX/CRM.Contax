@@ -426,14 +426,31 @@ async function renderReports() {
 // ---------- Usuarios ----------
 async function renderUsers() {
   await loadAll();
-  const rows = USERS.map(u => `<tr>
+  // PINs guardados (caja privada, solo admin). Si no es admin, no se cargan.
+  const PINS = {};
+  if (ME.role === "admin") {
+    try { (await getDocs(collection(db, "userPins"))).forEach(d => { PINS[d.id] = (d.data() || {}).pin || ""; }); } catch (e) {}
+  }
+  const isAdmin = ME.role === "admin";
+  const rows = USERS.map(u => {
+    const pin = PINS[u.uid] || "";
+    const pinCell = isAdmin
+      ? `<div style="display:flex;gap:5px;align-items:center">
+           <input class="mini pin-in" data-uid="${u.uid}" type="password" value="${escape(pin)}" placeholder="—" style="width:110px">
+           <span class="reveal mini pin-eye" data-uid="${u.uid}" title="Mostrar/ocultar">👁️</span>
+           <button class="mini pin-save" data-uid="${u.uid}">Guardar</button>
+         </div>`
+      : `<span style="color:var(--muted)">—</span>`;
+    return `<tr>
     <td>${escape(u.name || "—")}<div style="color:var(--muted);font-size:12px">${escape(u.email || "")}</div></td>
     <td><select class="mini role-sel" data-uid="${u.uid}" ${u.uid === ME.uid ? "disabled" : ""}>
       <option value="agent" ${u.role === "agent" ? "selected" : ""}>Agente</option>
       <option value="supervisor" ${u.role === "supervisor" ? "selected" : ""}>Supervisor</option>
       <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option></select></td>
-    <td>${u.active ? '<span class="pill agent">Activo</span>' : '<span class="pill" style="background:rgba(240,180,41,.15);color:var(--warn)">Inactivo</span>'}</td>
-    <td>${u.uid === ME.uid ? "" : `<button class="mini" data-toggle="${u.uid}" data-s="${u.active}">${u.active ? "Desactivar" : "Activar"}</button>`}</td></tr>`).join("");
+    <td>${pinCell}</td>
+    <td>${u.active ? '<span class="pill agent">Activo</span>' : '<span class="pill" style="background:var(--panel2);color:var(--muted);border:1px solid var(--line)">Inactivo</span>'}</td>
+    <td>${u.uid === ME.uid ? "" : `<button class="mini" data-toggle="${u.uid}" data-s="${u.active}">${u.active ? "Desactivar" : "Activar"}</button>`}</td></tr>`;
+  }).join("");
   el("v-users").innerHTML = `<h1>Usuarios</h1><p class="lead">Crea las cuentas de tu equipo. Tú les das el correo y el PIN; ellos solo usan la extensión.</p>
     <div class="formcard">
       <h3 style="margin:0 0 14px">Crear usuario</h3>
@@ -445,7 +462,8 @@ async function renderUsers() {
       <div class="msg" id="u_msg"></div>
       <p class="note" style="margin-top:8px">El usuario queda activo al instante. Comparte con esa persona su correo y PIN para que entre a la extensión.</p>
     </div>
-    <table><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+    <table><thead><tr><th>Usuario</th><th>Rol</th><th>PIN / Contraseña</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    ${isAdmin ? '<p class="note" style="margin-top:12px">🔒 El PIN se guarda en una caja privada que <b>solo el admin</b> puede ver, para recordarlo si alguien lo olvida. Firebase no permite leer la contraseña real, así que este campo es tu propio registro: al crear un usuario se guarda solo, y aquí puedes anotarlo o corregirlo. Si el equipo cambia su contraseña por otro medio, actualízala aquí.</p>' : ""}`;
 
   el("u_create").onclick = async () => {
     const name = el("u_name").value.trim(), email = el("u_email").value.trim(), pin = el("u_pin").value, role = el("u_role").value;
@@ -455,6 +473,7 @@ async function renderUsers() {
     try {
       const cred = await createUserWithEmailAndPassword(auth2, email, pin);
       await setDoc(doc(db, "users", cred.user.uid), { name, email, role, active: true, signature: "", createdAt: serverTimestamp() });
+      try { await setDoc(doc(db, "userPins", cred.user.uid), { pin, email, updatedAt: serverTimestamp() }); } catch (e) {}
       await signOut(auth2);
       msg.className = "msg ok"; msg.textContent = "✓ Usuario creado. Dale su correo y PIN.";
       el("u_name").value = ""; el("u_email").value = ""; el("u_pin").value = "";
@@ -466,6 +485,14 @@ async function renderUsers() {
   };
   document.querySelectorAll(".role-sel").forEach(s => s.onchange = async () => { await updateDoc(doc(db, "users", s.dataset.uid), { role: s.value }); renderUsers(); });
   document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = async () => { await updateDoc(doc(db, "users", b.dataset.toggle), { active: b.dataset.s !== "true" }); renderUsers(); });
+  document.querySelectorAll(".pin-eye").forEach(e => e.onclick = () => { const i = el("v-users").querySelector(`.pin-in[data-uid="${e.dataset.uid}"]`); if (i) i.type = i.type === "password" ? "text" : "password"; });
+  document.querySelectorAll(".pin-save").forEach(b => b.onclick = async () => {
+    const uid = b.dataset.uid, i = el("v-users").querySelector(`.pin-in[data-uid="${uid}"]`);
+    const u = USERS.find(x => x.uid === uid) || {};
+    b.disabled = true; b.textContent = "…";
+    try { await setDoc(doc(db, "userPins", uid), { pin: i.value, email: u.email || "", updatedAt: serverTimestamp() }, { merge: true }); b.textContent = "✓"; setTimeout(() => { b.textContent = "Guardar"; b.disabled = false; }, 1200); }
+    catch (e) { b.textContent = "Error"; b.disabled = false; }
+  });
 }
 
 // ---------- Configuración IA ----------
