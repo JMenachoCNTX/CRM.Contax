@@ -157,7 +157,7 @@ async function renderRespuestas() {
     return `<tr style="border-left:4px solid var(--line)">
     <td>${escape(q.nro || "")}</td>
     <td>${catChip(q.category)}</td>
-    <td><b>${escape(q.title || "")}</b>${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
+    <td><b>${escape(q.title || "")}</b>${q.image ? ' 📷' : ""}${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
     <td style="color:var(--muted)">${escape((q.text || "").slice(0, 60))}${(q.text || "").length > 60 ? "…" : ""}</td>
     <td style="white-space:nowrap"><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`;
   }).join("");
@@ -182,33 +182,96 @@ async function renderRespuestas() {
     await deleteDoc(doc(db, "quickReplies", q.id)); await sheetPush("delete", q); renderRespuestas();
   });
 }
+function qrWrapSel(ta, a, b) {
+  b = b || a;
+  const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
+  const sel = v.slice(s, e) || "texto";
+  ta.value = v.slice(0, s) + a + sel + b + v.slice(e);
+  ta.focus();
+  ta.selectionStart = s + a.length; ta.selectionEnd = s + a.length + sel.length;
+}
 function openQrModal(q) {
   qrEditId = q ? q.id : null;
+  let curImage = q && q.image ? q.image : "";
+  const cats = [...new Set(QR.map(x => x.category || "General"))];
   const bg = document.createElement("div");
   bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
   bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:640px;max-width:96vw;max-height:92vh;overflow-y:auto">
     <h3 style="margin:0 0 16px">${q ? "Editar" : "Nueva"} respuesta</h3>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1;min-width:100px"><label>Nro</label><input id="f_nro" value="${escape(q ? q.nro || "" : "")}"></div>
-      <div style="flex:2;min-width:160px"><label>Categoría</label><input id="f_cat" value="${escape(q ? q.category || "" : "")}" placeholder="Ventas" list="f_catlist"><datalist id="f_catlist">${[...new Set(QR.map(x => x.category || "General"))].map(c => `<option value="${escape(c)}">`).join("")}</datalist></div>
+    <div class="grid2">
+      <div class="field"><label>Nro</label><input id="f_nro" value="${escape(q ? q.nro || "" : "")}"></div>
+      <div class="field"><label>Categoría</label><input id="f_cat" value="${escape(q ? q.category || "" : "")}" placeholder="Ventas" list="f_catlist"><datalist id="f_catlist">${cats.map(c => `<option value="${escape(c)}">`).join("")}</datalist></div>
     </div>
-    <label>Nombre de la respuesta</label><input id="f_title" value="${escape(q ? q.title || "" : "")}" placeholder="Saludo">
-    <label>Descripción breve</label><input id="f_desc" value="${escape(q ? q.description || "" : "")}" placeholder="De qué trata">
-    <label>Respuesta</label><textarea id="f_text" style="min-height:220px;font-size:14px;line-height:1.5">${escape(q ? q.text || "" : "")}</textarea>
+    <div class="grid2">
+      <div class="field"><label>Nombre de la respuesta</label><input id="f_title" value="${escape(q ? q.title || "" : "")}" placeholder="Saludo"></div>
+      <div class="field"><label>Descripción breve</label><input id="f_desc" value="${escape(q ? q.description || "" : "")}" placeholder="De qué trata"></div>
+    </div>
+    <div class="field">
+      <label>Respuesta</label>
+      <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+        <button type="button" class="mini" id="f_b" title="Negrita (WhatsApp)"><b>N</b></button>
+        <button type="button" class="mini" id="f_i" title="Cursiva"><i>C</i></button>
+        <button type="button" class="mini" id="f_s" title="Tachado"><s>T</s></button>
+        <span class="note" style="align-self:center">Selecciona texto y aplica formato. En WhatsApp se ve *negrita*, _cursiva_, ~tachado~.</span>
+      </div>
+      <textarea id="f_text" style="min-height:200px;font-size:14px;line-height:1.6;white-space:pre-wrap">${escape(q ? q.text || "" : "")}</textarea>
+    </div>
+    <div class="field">
+      <label>Imagen (opcional) — p. ej. tu QR de pago</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="button" class="btn sec" id="f_imgbtn" style="border:1px solid var(--line)">📷 Elegir imagen</button>
+        <button type="button" class="mini" id="f_imgclear" style="${curImage ? "" : "display:none"}">Quitar</button>
+        <span class="note" id="f_imgnote">Se guarda junto a la respuesta. En el CRM podrás copiarla y pegarla en el chat.</span>
+      </div>
+      <img id="f_imgprev" src="${curImage || ""}" style="${curImage ? "" : "display:none;"}max-width:160px;max-height:160px;margin-top:10px;border:1px solid var(--line);border-radius:8px">
+      <input type="file" id="f_imgfile" accept="image/*" style="display:none">
+    </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px"><button class="btn sec" id="f_cancel" style="border:1px solid var(--line)">Cancelar</button><button class="btn" id="f_save">Guardar</button></div>
     <div class="msg" id="f_msg"></div>
   </div>`;
   document.body.appendChild(bg);
   const close = () => bg.remove();
+  const $ = s => bg.querySelector(s);
   bg.onclick = (e) => { if (e.target === bg) close(); };
-  bg.querySelector("#f_cancel").onclick = close;
-  bg.querySelector("#f_save").onclick = async () => {
-    const item = { nro: bg.querySelector("#f_nro").value.trim(), category: bg.querySelector("#f_cat").value.trim() || "General", title: bg.querySelector("#f_title").value.trim(), description: bg.querySelector("#f_desc").value.trim(), text: bg.querySelector("#f_text").value.trim() };
-    if (!item.title || !item.text) { bg.querySelector("#f_msg").className = "msg err"; bg.querySelector("#f_msg").textContent = "Completa nombre y respuesta."; return; }
-    if (qrEditId) await updateDoc(doc(db, "quickReplies", qrEditId), item);
-    else await setDoc(doc(collection(db, "quickReplies")), item);
-    await sheetPush("upsert", item);
-    close(); renderRespuestas();
+  $("#f_cancel").onclick = close;
+  const ta = $("#f_text");
+  $("#f_b").onclick = () => qrWrapSel(ta, "*");
+  $("#f_i").onclick = () => qrWrapSel(ta, "_");
+  $("#f_s").onclick = () => qrWrapSel(ta, "~");
+  // Imagen: elegir, comprimir a PNG y previsualizar
+  $("#f_imgbtn").onclick = () => $("#f_imgfile").click();
+  $("#f_imgclear").onclick = () => { curImage = ""; $("#f_imgprev").style.display = "none"; $("#f_imgprev").src = ""; $("#f_imgclear").style.display = "none"; $("#f_imgnote").textContent = "Imagen quitada."; };
+  $("#f_imgfile").onchange = () => {
+    const file = $("#f_imgfile").files[0]; if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 900, sc = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        curImage = cv.toDataURL("image/png");
+        $("#f_imgprev").src = curImage; $("#f_imgprev").style.display = "";
+        $("#f_imgclear").style.display = "";
+        const kb = Math.round(curImage.length * 0.75 / 1024);
+        $("#f_imgnote").textContent = kb > 700 ? `⚠️ Imagen pesada (~${kb} KB). Usa uno más liviano si falla al guardar.` : `Imagen lista (~${kb} KB).`;
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  };
+  $("#f_save").onclick = async () => {
+    const item = { nro: $("#f_nro").value.trim(), category: $("#f_cat").value.trim() || "General", title: $("#f_title").value.trim(), description: $("#f_desc").value.trim(), text: $("#f_text").value.replace(/\s+$/, "") };
+    if (!item.title || !item.text) { $("#f_msg").className = "msg err"; $("#f_msg").textContent = "Completa nombre y respuesta."; return; }
+    item.image = curImage || "";
+    $("#f_save").disabled = true; $("#f_msg").className = "msg"; $("#f_msg").textContent = "Guardando…";
+    try {
+      if (qrEditId) await updateDoc(doc(db, "quickReplies", qrEditId), item);
+      else await setDoc(doc(collection(db, "quickReplies")), item);
+      await sheetPush("upsert", item);
+      close(); renderRespuestas();
+    } catch (e) { $("#f_save").disabled = false; $("#f_msg").className = "msg err"; $("#f_msg").textContent = "Error al guardar" + (String(e).includes("longer than") || String(e).includes("bytes") ? ": la imagen es muy grande. Usa una más liviana." : ": " + (e.code || e.message)); }
   };
 }
 function importFromSheet() {
