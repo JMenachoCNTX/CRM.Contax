@@ -158,7 +158,7 @@ async function renderRespuestas() {
     <td>${escape(q.nro || "")}</td>
     <td>${catChip(q.category)}</td>
     <td><b>${escape(q.title || "")}</b>${q.image ? ' 📷' : ""}${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
-    <td style="color:var(--muted)">${escape((q.text || "").slice(0, 60))}${(q.text || "").length > 60 ? "…" : ""}</td>
+    <td style="color:var(--muted)">${q.text ? escape(q.text.slice(0, 60)) + (q.text.length > 60 ? "…" : "") : (q.image ? "🖼️ (solo imagen)" : "")}</td>
     <td style="white-space:nowrap"><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`;
   }).join("");
   el("v-respuestas").innerHTML = `<h1>Respuestas rápidas</h1><p class="lead">Créalas y edítalas aquí; se comparten con todo el equipo (y con el Google Sheet, si está conectado).</p>
@@ -263,8 +263,9 @@ function openQrModal(q) {
   };
   $("#f_save").onclick = async () => {
     const item = { nro: $("#f_nro").value.trim(), category: $("#f_cat").value.trim() || "General", title: $("#f_title").value.trim(), description: $("#f_desc").value.trim(), text: $("#f_text").value.replace(/\s+$/, "") };
-    if (!item.title || !item.text) { $("#f_msg").className = "msg err"; $("#f_msg").textContent = "Completa nombre y respuesta."; return; }
     item.image = curImage || "";
+    if (!item.title) { $("#f_msg").className = "msg err"; $("#f_msg").textContent = "Ponle un nombre a la respuesta."; return; }
+    if (!item.text && !item.image) { $("#f_msg").className = "msg err"; $("#f_msg").textContent = "Agrega texto o una imagen."; return; }
     $("#f_save").disabled = true; $("#f_msg").className = "msg"; $("#f_msg").textContent = "Guardando…";
     try {
       if (qrEditId) await updateDoc(doc(db, "quickReplies", qrEditId), item);
