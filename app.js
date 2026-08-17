@@ -511,7 +511,7 @@ async function renderUsers() {
 // ---------- Configuración IA ----------
 const AI_MODELS = {
   deepseek: [["deepseek-chat", "deepseek-chat (recomendado)"], ["deepseek-reasoner", "deepseek-reasoner (razonamiento)"]],
-  gemini: [["gemini-2.0-flash", "gemini-2.0-flash (recomendado)"], ["gemini-1.5-flash", "gemini-1.5-flash"], ["gemini-2.5-flash", "gemini-2.5-flash"]]
+  gemini: [["gemini-2.5-flash", "gemini-2.5-flash (recomendado)"], ["gemini-2.5-pro", "gemini-2.5-pro (más potente)"], ["gemini-flash-latest", "gemini-flash-latest (siempre el más nuevo)"], ["gemini-2.0-flash", "gemini-2.0-flash (antiguo)"]]
 };
 const AI_HELP = {
   deepseek: 'Consigue tu clave en <a href="https://platform.deepseek.com/api_keys" target="_blank" style="color:var(--green)">platform.deepseek.com</a> (crea cuenta, agrega saldo — es muy barato — y crea una API key). Empieza con <code>sk-</code>.',
@@ -555,6 +555,22 @@ async function renderConfig() {
       <input id="c_sheet" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.sheetUrl || "")}">
       <button class="btn" id="c_ssave">Guardar URL</button>
       <div class="msg" id="c_smsg"></div>
+    </div>
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">🧠 Conocimiento de la empresa (para la IA)</h3>
+      <p class="note" style="margin:0 0 12px">Escribe aquí todo lo que la IA debe saber de tu empresa: qué es CONTAX, servicios y precios,
+      formas de pago, horarios, procedimientos, tono de respuesta, datos de contacto, preguntas frecuentes, etc.
+      La IA usará esto como base en <b>Consultar</b>, <b>Sugerir</b>, <b>Mejorar</b> y <b>Resumir</b>, para todo el equipo.</p>
+      <textarea id="c_context" style="width:100%;min-height:220px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:13px;line-height:1.5;font-family:inherit" placeholder="Ej:
+CONTAX es una empresa de contabilidad e impuestos en Santa Cruz, Bolivia.
+Servicios: declaraciones mensuales, RCV, balances, trámites SEPREC/SIAT, emisión y verificación de facturas, asesoramiento.
+Precios: declaración mensual desde Bs 50; balance desde Bs …
+Formas de pago: QR / transferencia. Enviar comprobante por WhatsApp.
+Horario: Lun-Vie 8:30-18:00.
+Tono: cordial, claro y profesional. Tratar de 'usted'.
+Contacto: …">${escape(cfg.aiContext || "")}</textarea>
+      <button class="btn" id="c_ctxsave">Guardar conocimiento</button>
+      <div class="msg" id="c_ctxmsg"></div>
     </div>`;
   const provSel = el("c_provider"); provSel.value = provider;
   function fillModels() {
@@ -580,6 +596,11 @@ async function renderConfig() {
   el("c_ssave").onclick = async () => {
     const msg = el("c_smsg"); msg.className = "msg"; msg.textContent = "Guardando…";
     try { await setDoc(doc(db, "config", "app"), { sheetUrl: el("c_sheet").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada."; }
+    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_ctxsave").onclick = async () => {
+    const msg = el("c_ctxmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    try { await setDoc(doc(db, "config", "app"), { aiContext: el("c_context").value, updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Conocimiento guardado. La IA ya lo usa para todo el equipo."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
 }
