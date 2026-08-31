@@ -89,6 +89,7 @@ function switchView(v, btn) {
   el("v-" + v).classList.add("active");
   if (v === "inicio") renderInicio();
   if (v === "clientes") renderClientes();
+  if (v === "basedatos") renderBaseDatos();
   if (v === "presence") renderPresence();
   if (v === "historial") renderHistorial();
   if (v === "bandeja") renderBandeja();
@@ -557,6 +558,16 @@ async function renderConfig() {
       <div class="msg" id="c_smsg"></div>
     </div>
     <div class="formcard">
+      <h3 style="margin:0 0 6px">🗄️ Base de Datos (Google Sheets · BDCONTAX)</h3>
+      <p class="note" style="margin:0 0 12px">Pega la URL del "puente" (Apps Script) conectado a tu hoja <b>BDCONTAX</b>.
+      Con esto la pestaña <b>Base de Datos</b> lee y guarda directamente en tu Google Sheet (el Sheet sigue siendo la fuente principal).
+      Sigue la guía <b>GUIA-BASE-DE-DATOS.md</b>.</p>
+      <label>URL del puente de la Base de Datos (…/exec)</label>
+      <input id="c_bdurl" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.bdUrl || "")}">
+      <button class="btn" id="c_bdsave">Guardar URL</button>
+      <div class="msg" id="c_bdmsg"></div>
+    </div>
+    <div class="formcard">
       <h3 style="margin:0 0 6px">🧠 Conocimiento de la empresa (para la IA)</h3>
       <p class="note" style="margin:0 0 12px">Escribe aquí todo lo que la IA debe saber de tu empresa: qué es CONTAX, servicios y precios,
       formas de pago, horarios, procedimientos, tono de respuesta, datos de contacto, preguntas frecuentes, etc.
@@ -596,6 +607,11 @@ Contacto: …">${escape(cfg.aiContext || "")}</textarea>
   el("c_ssave").onclick = async () => {
     const msg = el("c_smsg"); msg.className = "msg"; msg.textContent = "Guardando…";
     try { await setDoc(doc(db, "config", "app"), { sheetUrl: el("c_sheet").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada."; }
+    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_bdsave").onclick = async () => {
+    const msg = el("c_bdmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    try { await setDoc(doc(db, "config", "app"), { bdUrl: el("c_bdurl").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); bdUrlCache = ""; bdLoaded = false; msg.className = "msg ok"; msg.textContent = "✓ URL guardada. Abre la pestaña Base de Datos."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
   el("c_ctxsave").onclick = async () => {
@@ -871,6 +887,194 @@ function exportClientesCSV() {
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = "clientes-contax.csv"; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ============================================================
+//  MÓDULO BASE DE DATOS (Google Sheets · hoja BDCONTAX vía Apps Script)
+//  El Google Sheets sigue siendo la fuente; el portal lo lee y escribe.
+// ============================================================
+// [clave interna, ETIQUETA EXACTA en el Sheet (fila A1), grupo, tipo]
+const BD_FIELDS = [
+  ["nombre", "NOMBRE", "Cliente", "text"],
+  ["codigoId", "Codigo de ID", "Cliente", "text"],
+  ["nit", "NIT", "Cliente", "text"],
+  ["razon", "Nombre o Razón Social", "Cliente", "text"],
+  ["celular", "Celular", "Cliente", "text"],
+  ["correo", "Correo Electrónico", "Cliente", "text"],
+  ["tipo", "Tipo de Contribuyente", "Actividad", "text"],
+  ["actP", "Actividad Principal", "Actividad", "text"],
+  ["actS", "Actividad Secundaria", "Actividad", "text"],
+  ["brinda", "Brinda Servicios A", "Actividad", "text"],
+  ["fechaNit", "Fecha Apertura NIT", "Actividad", "text"],
+  ["usuario", "Usuario", "Accesos", "text"],
+  ["password", "Contraseña", "Accesos", "secret"],
+  ["passSiat", "Contraseña SIAT", "Accesos", "secret"],
+  ["capital", "Inicio De Capital", "SEPREC", "text"],
+  ["estMat", "Estado de La Matricula SEPREC", "SEPREC", "text"],
+  ["correoSeprec", "Correo SEPREC", "SEPREC", "text"],
+  ["userSeprec", "Usuario SEPREC", "SEPREC", "text"],
+  ["passSeprec", "Contraseña SEPREC", "SEPREC", "secret"],
+  ["estado", "Estado Usuario", "Adicionales", "estado"],
+  ["costo", "Costo Servicio Mensual", "Adicionales", "text"],
+  ["fechaInact", "Fecha Inactivación", "Adicionales", "text"],
+  ["comentarios", "Comentarios", "Adicionales", "textarea"]
+];
+const BD_GROUPS = ["Cliente", "Actividad", "Accesos", "SEPREC", "Adicionales"];
+const BD_LBL2KEY = {}; BD_FIELDS.forEach(f => BD_LBL2KEY[f[1]] = f[0]);
+let BD = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded = false, bdUrlCache = "";
+
+function bdIsActivo(r) { return /^activo/i.test(String(r.estado || "").trim()); }
+function bdMoney(v) { let s = String(v == null ? "" : v).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".").replace(/[^\d.]/g, ""); const n = parseFloat(s); return isNaN(n) ? 0 : n; }
+function fmtBs2(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { maximumFractionDigits: 2 }); }
+// Convierte una fila del Sheet (claves = etiquetas) a claves internas
+function bdRowToObj(r) { const o = {}; for (const lbl in r) { const k = BD_LBL2KEY[lbl]; if (k) o[k] = r[lbl]; } return o; }
+// Convierte claves internas a etiquetas del Sheet (para guardar)
+function bdObjToLabels(o) { const r = {}; BD_FIELDS.forEach(([k, lbl]) => { r[lbl] = o[k] != null ? o[k] : ""; }); return r; }
+
+async function bdBridgeUrl() { const cfg = await loadConfigDoc(); return (cfg.bdUrl || "").trim(); }
+
+function bdFetch(cb) {
+  bdBridgeUrl().then(url => {
+    if (!url) { cb({ error: "nourl" }); return; }
+    bdUrlCache = url;
+    const cbn = "bdcb_" + Date.now() + Math.floor(Math.random() * 999);
+    const s = document.createElement("script");
+    const to = setTimeout(() => { try { delete window[cbn]; } catch (e) {} s.remove(); cb({ error: "timeout" }); }, 20000);
+    window[cbn] = (data) => { clearTimeout(to); try { delete window[cbn]; } catch (e) {} s.remove(); cb(data || {}); };
+    const sep = url.indexOf("?") >= 0 ? "&" : "?";
+    s.src = url + sep + "action=list&callback=" + cbn;
+    s.onerror = () => { clearTimeout(to); try { delete window[cbn]; } catch (e) {} s.remove(); cb({ error: "net" }); };
+    document.body.appendChild(s);
+  });
+}
+
+async function renderBaseDatos() {
+  const url = await bdBridgeUrl();
+  if (!url) {
+    el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
+      <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets, dentro del portal. El Sheet sigue siendo la fuente y puedes seguir usándolo normal.</p>
+      <div class="formcard"><h3 style="margin:0 0 8px">Falta conectar tu Google Sheets</h3>
+      <p class="note">Ve a <b>⚙️ Configuración → Base de Datos (Google Sheets)</b> y pega la URL del puente (Apps Script). Te pasé el código para instalarlo en tu hoja.</p>
+      <button class="btn" onclick="document.querySelector('nav.tabs [data-v=config]').click()">Ir a Configuración</button></div>`;
+    return;
+  }
+  el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="lead"><span class="cx-spin"></span> Cargando desde Google Sheets…</p>`;
+  bdFetch((data) => {
+    if (data.error) {
+      el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="msg err">No se pudo leer el Sheet (${escape(data.error)}). Revisa la URL del puente en ⚙️ Configuración y que el Apps Script esté publicado como "Cualquiera".</p>
+        <button class="btn sec" style="border:1px solid var(--line)">Reintentar</button>`;
+      const b = el("v-basedatos").querySelector("button"); if (b) b.onclick = () => renderBaseDatos();
+      return;
+    }
+    BD = (data.rows || []).map(bdRowToObj).filter(r => (r.nombre || r.razon || r.codigoId || r.nit));
+    bdLoaded = true;
+    paintBaseDatos();
+  });
+}
+
+function paintBaseDatos() {
+  const canEdit = canEditClientes();
+  // _i estable por índice en BD (antes de construir filas)
+  BD.forEach((r, i) => r._i = i);
+  const term = bdFilter.toLowerCase().trim();
+  const tipos = [...new Set(BD.map(r => (r.tipo || "").trim()).filter(Boolean))].sort();
+  const estados = [...new Set(BD.map(r => (r.estado || "").trim()).filter(Boolean))].sort();
+  const list = BD.filter(r => {
+    if (bdEstado === "__activo" && !bdIsActivo(r)) return false;
+    if (bdEstado === "__inactivo" && bdIsActivo(r)) return false;
+    if (bdEstado && bdEstado.indexOf("__") !== 0 && (r.estado || "").trim() !== bdEstado) return false;
+    if (bdTipo && (r.tipo || "").trim() !== bdTipo) return false;
+    if (term && !`${r.codigoId} ${r.nit} ${r.nombre} ${r.razon} ${r.celular} ${r.correo} ${r.actP}`.toLowerCase().includes(term)) return false;
+    return true;
+  });
+  const total = BD.length, activos = BD.filter(bdIsActivo).length;
+  const ingreso = BD.filter(bdIsActivo).reduce((s, r) => s + bdMoney(r.costo), 0);
+  const rows = list.map((r, i) => `<tr class="clienterow" data-open="${r._i}" style="cursor:pointer">
+    <td>${escape(r.codigoId || "—")}</td>
+    <td><b>${escape(r.razon || r.nombre || "—")}</b>${r.nit ? `<div style="color:var(--muted);font-size:12px">NIT ${escape(r.nit)}</div>` : ""}</td>
+    <td>${escape(r.celular || "—")}</td>
+    <td>${escape(r.tipo || "—")}</td>
+    <td><span class="badge ${bdIsActivo(r) ? "ok" : "off"}">${escape(r.estado || "—")}</span></td>
+    <td style="text-align:right">${r.costo ? escape(String(r.costo)) : "—"}</td>
+    <td style="white-space:nowrap"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`).join("");
+  el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
+    <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí. 🔄</p>
+    <div class="kpis">
+      <div class="kpi"><div class="n">${total}</div><div class="l">Registros</div></div>
+      <div class="kpi"><div class="n" style="color:var(--green)">${activos}</div><div class="l">Activos</div></div>
+      <div class="kpi"><div class="n" style="color:var(--warn)">${total - activos}</div><div class="l">Inactivos</div></div>
+      <div class="kpi"><div class="n">${fmtBs2(ingreso)}</div><div class="l">Ingreso mensual (activos)</div></div>
+    </div>
+    <div class="toolbar">
+      <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar por nombre, NIT, código, celular…" value="${escape(bdFilter)}">
+      <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><option value="__activo">Solo activos</option><option value="__inactivo">Solo inactivos</option>${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</select>
+      <select id="bd_tipo" class="mini" style="padding:9px"><option value="">Todos los tipos</option>${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}</select>
+      ${canEdit ? '<button class="btn" id="bd_new">＋ Nuevo</button>' : ""}
+      <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">🔄 Actualizar</button>
+      <span class="msg" id="bd_msg" style="align-self:center"></span>
+    </div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Código</th><th>Cliente</th><th>Celular</th><th>Tipo</th><th>Estado</th><th style="text-align:right">Costo/mes</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted)">Sin registros con estos filtros.</td></tr>`}</tbody></table></div>
+    <p class="note" style="margin-top:10px">Mostrando ${list.length} de ${total}. Toca una fila para ver la ficha completa.</p>`;
+  el("bd_search").oninput = () => { bdFilter = el("bd_search").value; paintBaseDatos(); };
+  el("bd_estado").value = bdEstado; el("bd_estado").onchange = () => { bdEstado = el("bd_estado").value; paintBaseDatos(); };
+  el("bd_tipo").value = bdTipo; el("bd_tipo").onchange = () => { bdTipo = el("bd_tipo").value; paintBaseDatos(); };
+  if (el("bd_new")) el("bd_new").onclick = () => openBDModal(null);
+  el("bd_reload").onclick = () => renderBaseDatos();
+  el("v-basedatos").querySelectorAll("[data-edit]").forEach(b => b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
+  el("v-basedatos").querySelectorAll("[data-open]").forEach(r => r.onclick = () => openBDModal(BD[+r.dataset.open]));
+}
+
+function openBDModal(row) {
+  const canEdit = canEditClientes();
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const groupsHtml = BD_GROUPS.map(g => {
+    const fields = BD_FIELDS.filter(f => f[2] === g);
+    const inputs = fields.map(([key, label, , type]) => {
+      const val = escape(row ? (row[key] != null ? row[key] : "") : "");
+      const dis = canEdit ? "" : "disabled";
+      if (type === "textarea") return `<div class="field" style="grid-column:1/-1"><label>${escape(label)}</label><textarea id="bf_${key}" style="min-height:70px" ${dis}>${val}</textarea></div>`;
+      if (type === "secret") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="bf_${key}" style="font-size:11px">👁 mostrar</span></div>`;
+      if (type === "estado") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" value="${val}" list="bf_estlist" placeholder="ACTIVO" ${dis}></div>`;
+      return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" value="${val}" ${dis}></div>`;
+    }).join("");
+    return `<div class="fs">${g}</div><div class="grid2">${inputs}</div>`;
+  }).join("");
+  const estOpts = [...new Set(BD.map(x => (x.estado || "").trim()).filter(Boolean))];
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">${row ? (canEdit ? "Editar registro" : "Ficha") : "Nuevo registro"}</h3>
+      <button class="mini" id="bf_x">✕</button></div>
+    <datalist id="bf_estlist">${estOpts.map(e => `<option value="${escape(e)}">`).join("")}</datalist>
+    ${groupsHtml}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button class="btn sec" id="bf_cancel" style="border:1px solid var(--line)">Cerrar</button>
+      ${canEdit ? '<button class="btn" id="bf_save">Guardar en el Sheet</button>' : ""}</div>
+    <div class="msg" id="bf_msg"></div></div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = (e) => { if (e.target === bg) close(); };
+  bg.querySelector("#bf_x").onclick = close;
+  bg.querySelector("#bf_cancel").onclick = close;
+  bg.querySelectorAll("[data-rev]").forEach(s => s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "👁 mostrar" : "🙈 ocultar"; } });
+  const saveBtn = bg.querySelector("#bf_save");
+  if (saveBtn) saveBtn.onclick = async () => {
+    const item = {}; BD_FIELDS.forEach(([key]) => { const i = bg.querySelector("#bf_" + key); item[key] = i ? i.value.trim() : ""; });
+    if (!item.razon && !item.nombre) { bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "Pon al menos el nombre o razón social."; return; }
+    saveBtn.disabled = true; bg.querySelector("#bf_msg").className = "msg"; bg.querySelector("#bf_msg").textContent = "Guardando en el Sheet…";
+    const ok = await bdSave(item, row ? row.codigoId : "");
+    if (ok) { close(); const m = el("bd_msg"); renderBaseDatos(); setTimeout(() => { const mm = el("bd_msg"); if (mm) { mm.className = "msg ok"; mm.textContent = "✓ Guardado en Google Sheets."; } }, 400); }
+    else { saveBtn.disabled = false; bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "No se pudo guardar. Revisa el puente/URL."; }
+  };
+}
+
+async function bdSave(item, keyValue) {
+  const url = await bdBridgeUrl(); if (!url) return false;
+  const payload = { action: "save", key: "Codigo de ID", keyValue: keyValue || item.codigoId || "", item: bdObjToLabels(item) };
+  try { await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) }); return true; }
+  catch (e) { return false; }
 }
 
 function escape(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
