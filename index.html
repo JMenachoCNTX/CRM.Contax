@@ -66,6 +66,8 @@
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
   .fs{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
   .reveal{cursor:pointer;user-select:none}
+  .cx-spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:cxspin .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes cxspin{to{transform:rotate(360deg)}}
   @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
 </style>
 </head>
@@ -94,6 +96,7 @@
   <nav class="tabs">
     <button data-v="inicio" data-grp="portal">🏠 Inicio</button>
     <button data-v="clientes" data-grp="portal">🗂️ Clientes</button>
+    <button data-v="basedatos" data-grp="portal">🗄️ Base de Datos</button>
     <button data-v="presence" data-grp="crm" class="active">🟢 Presencia</button>
     <button data-v="historial" data-grp="crm">📆 Historial</button>
     <button data-v="bandeja" data-grp="crm">📥 Bandeja</button>
@@ -105,6 +108,7 @@
   <main>
     <div class="view" id="v-inicio"></div>
     <div class="view" id="v-clientes"></div>
+    <div class="view" id="v-basedatos"></div>
     <div class="view active" id="v-presence"></div>
     <div class="view" id="v-historial"></div>
     <div class="view" id="v-bandeja"></div>
