@@ -921,15 +921,28 @@ const BD_FIELDS = [
 ];
 const BD_GROUPS = ["Cliente", "Actividad", "Accesos", "SEPREC", "Adicionales"];
 const BD_LBL2KEY = {}; BD_FIELDS.forEach(f => BD_LBL2KEY[f[1]] = f[0]);
-let BD = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded = false, bdUrlCache = "";
+const BD_KEY2LBL = {}; BD_FIELDS.forEach(f => BD_KEY2LBL[f[0]] = f[1]);
+const BD_SECRET_LBL = BD_FIELDS.filter(f => f[3] === "secret").map(f => f[1]);
+// Las filas se guardan TAL CUAL vienen del Sheet: claves = etiquetas (títulos).
+let BD = [], bdHeader = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded = false, bdUrlCache = "";
 
-function bdIsActivo(r) { return /^activo/i.test(String(r.estado || "").trim()); }
+// Lee un campo por su clave interna (busca la etiqueta del Sheet)
+function bdV(r, key) { const lbl = BD_KEY2LBL[key]; const v = r && lbl != null ? r[lbl] : ""; return String(v == null ? "" : v).trim(); }
+
+// Clasifica el "Estado Usuario" — activo/inactivo/lista negra, con color
+function bdEstadoInfo(r) {
+  const raw = bdV(r, "estado");
+  const u = raw.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let cls = "off";           // gris = inactivo por defecto
+  if (u === "ACTIVO") cls = "ok";
+  else if (u.indexOf("SUSCRIPCION") >= 0 || u.indexOf("FACTURACION") >= 0) cls = "ok"; // activo (facturando)
+  else if (u.indexOf("LISTA NEGRA") >= 0) cls = "danger";
+  // CLIENTE INACTIVO, INACTIVO SOLICITADO, vacío → off
+  return { raw: raw, cls: cls, activo: cls === "ok" };
+}
+function bdIsActivo(r) { return bdEstadoInfo(r).activo; }
 function bdMoney(v) { let s = String(v == null ? "" : v).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".").replace(/[^\d.]/g, ""); const n = parseFloat(s); return isNaN(n) ? 0 : n; }
 function fmtBs2(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { maximumFractionDigits: 2 }); }
-// Convierte una fila del Sheet (claves = etiquetas) a claves internas
-function bdRowToObj(r) { const o = {}; for (const lbl in r) { const k = BD_LBL2KEY[lbl]; if (k) o[k] = r[lbl]; } return o; }
-// Convierte claves internas a etiquetas del Sheet (para guardar)
-function bdObjToLabels(o) { const r = {}; BD_FIELDS.forEach(([k, lbl]) => { r[lbl] = o[k] != null ? o[k] : ""; }); return r; }
 
 async function bdBridgeUrl() { const cfg = await loadConfigDoc(); return (cfg.bdUrl || "").trim(); }
 
@@ -966,7 +979,11 @@ async function renderBaseDatos() {
       const b = el("v-basedatos").querySelector("button"); if (b) b.onclick = () => renderBaseDatos();
       return;
     }
-    BD = (data.rows || []).map(bdRowToObj).filter(r => (r.nombre || r.razon || r.codigoId || r.nit));
+    const rows = (data.rows || []);
+    BD = rows.filter(r => (bdV(r, "nombre") || bdV(r, "razon") || bdV(r, "codigoId") || bdV(r, "nit")));
+    // Orden de columnas TAL CUAL el Sheet (fila 1). Si el puente no lo manda, lo deducimos.
+    bdHeader = (data.header && data.header.length) ? data.header
+             : (BD.length ? Object.keys(BD[0]) : BD_FIELDS.map(f => f[1]));
     bdLoaded = true;
     paintBaseDatos();
   });
@@ -977,28 +994,40 @@ function paintBaseDatos() {
   // _i estable por índice en BD (antes de construir filas)
   BD.forEach((r, i) => r._i = i);
   const term = bdFilter.toLowerCase().trim();
-  const tipos = [...new Set(BD.map(r => (r.tipo || "").trim()).filter(Boolean))].sort();
-  const estados = [...new Set(BD.map(r => (r.estado || "").trim()).filter(Boolean))].sort();
+  const ESTADO_LBL = BD_KEY2LBL["estado"];   // "Estado Usuario"
+  const TIPO_LBL = BD_KEY2LBL["tipo"];       // "Tipo de Contribuyente"
+  const tipos = [...new Set(BD.map(r => bdV(r, "tipo")).filter(Boolean))].sort();
+  const estados = [...new Set(BD.map(r => bdV(r, "estado")).filter(Boolean))].sort();
   const list = BD.filter(r => {
     if (bdEstado === "__activo" && !bdIsActivo(r)) return false;
     if (bdEstado === "__inactivo" && bdIsActivo(r)) return false;
-    if (bdEstado && bdEstado.indexOf("__") !== 0 && (r.estado || "").trim() !== bdEstado) return false;
-    if (bdTipo && (r.tipo || "").trim() !== bdTipo) return false;
-    if (term && !`${r.codigoId} ${r.nit} ${r.nombre} ${r.razon} ${r.celular} ${r.correo} ${r.actP}`.toLowerCase().includes(term)) return false;
+    if (bdEstado && bdEstado.indexOf("__") !== 0 && bdV(r, "estado") !== bdEstado) return false;
+    if (bdTipo && bdV(r, "tipo") !== bdTipo) return false;
+    if (term) {
+      let hay = false;
+      for (const lbl of bdHeader) { if (String(r[lbl] == null ? "" : r[lbl]).toLowerCase().includes(term)) { hay = true; break; } }
+      if (!hay) return false;
+    }
     return true;
   });
   const total = BD.length, activos = BD.filter(bdIsActivo).length;
-  const ingreso = BD.filter(bdIsActivo).reduce((s, r) => s + bdMoney(r.costo), 0);
-  const rows = list.map((r, i) => `<tr class="clienterow" data-open="${r._i}" style="cursor:pointer">
-    <td>${escape(r.codigoId || "—")}</td>
-    <td><b>${escape(r.razon || r.nombre || "—")}</b>${r.nit ? `<div style="color:var(--muted);font-size:12px">NIT ${escape(r.nit)}</div>` : ""}</td>
-    <td>${escape(r.celular || "—")}</td>
-    <td>${escape(r.tipo || "—")}</td>
-    <td><span class="badge ${bdIsActivo(r) ? "ok" : "off"}">${escape(r.estado || "—")}</span></td>
-    <td style="text-align:right">${r.costo ? escape(String(r.costo)) : "—"}</td>
-    <td style="white-space:nowrap"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`).join("");
+  const ingreso = BD.filter(bdIsActivo).reduce((s, r) => s + bdMoney(bdV(r, "costo")), 0);
+  // Cabecera: todas las columnas del Sheet + una fija al final para "Editar/Ver"
+  const thead = `<tr>${bdHeader.map(h => `<th>${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
+  const rows = list.map(r => {
+    const tds = bdHeader.map(lbl => {
+      const val = String(r[lbl] == null ? "" : r[lbl]);
+      if (lbl === ESTADO_LBL) {
+        const info = bdEstadoInfo(r);
+        return `<td><span class="badge ${info.cls}">${escape(info.raw || "—")}</span></td>`;
+      }
+      return `<td title="${escape(val)}">${escape(val) || "<span style='color:var(--muted)'>—</span>"}</td>`;
+    }).join("");
+    return `<tr data-open="${r._i}">${tds}<td class="bd-actioncol"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`;
+  }).join("");
+  const colspan = bdHeader.length + 1;
   el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
-    <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí. 🔄</p>
+    <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets, con las ${bdHeader.length} columnas tal cual. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí. 🔄</p>
     <div class="kpis">
       <div class="kpi"><div class="n">${total}</div><div class="l">Registros</div></div>
       <div class="kpi"><div class="n" style="color:var(--green)">${activos}</div><div class="l">Activos</div></div>
@@ -1006,24 +1035,24 @@ function paintBaseDatos() {
       <div class="kpi"><div class="n">${fmtBs2(ingreso)}</div><div class="l">Ingreso mensual (activos)</div></div>
     </div>
     <div class="toolbar">
-      <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar por nombre, NIT, código, celular…" value="${escape(bdFilter)}">
+      <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar en toda la base…" value="${escape(bdFilter)}">
       <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><option value="__activo">Solo activos</option><option value="__inactivo">Solo inactivos</option>${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</select>
       <select id="bd_tipo" class="mini" style="padding:9px"><option value="">Todos los tipos</option>${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}</select>
       ${canEdit ? '<button class="btn" id="bd_new">＋ Nuevo</button>' : ""}
       <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">🔄 Actualizar</button>
       <span class="msg" id="bd_msg" style="align-self:center"></span>
     </div>
-    <div style="overflow-x:auto"><table>
-      <thead><tr><th>Código</th><th>Cliente</th><th>Celular</th><th>Tipo</th><th>Estado</th><th style="text-align:right">Costo/mes</th><th></th></tr></thead>
-      <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted)">Sin registros con estos filtros.</td></tr>`}</tbody></table></div>
-    <p class="note" style="margin-top:10px">Mostrando ${list.length} de ${total}. Toca una fila para ver la ficha completa.</p>`;
+    <div class="bd-scroll"><table class="bd-table">
+      <thead>${thead}</thead>
+      <tbody>${rows || `<tr><td colspan="${colspan}" style="color:var(--muted)">Sin registros con estos filtros.</td></tr>`}</tbody></table></div>
+    <p class="note" style="margin-top:10px">Mostrando ${list.length} de ${total}. Toca una fila para ver la ficha completa. Desliza a los lados para ver todas las columnas.</p>`;
   el("bd_search").oninput = () => { bdFilter = el("bd_search").value; paintBaseDatos(); };
   el("bd_estado").value = bdEstado; el("bd_estado").onchange = () => { bdEstado = el("bd_estado").value; paintBaseDatos(); };
   el("bd_tipo").value = bdTipo; el("bd_tipo").onchange = () => { bdTipo = el("bd_tipo").value; paintBaseDatos(); };
   if (el("bd_new")) el("bd_new").onclick = () => openBDModal(null);
   el("bd_reload").onclick = () => renderBaseDatos();
   el("v-basedatos").querySelectorAll("[data-edit]").forEach(b => b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
-  el("v-basedatos").querySelectorAll("[data-open]").forEach(r => r.onclick = () => openBDModal(BD[+r.dataset.open]));
+  el("v-basedatos").querySelectorAll("tr[data-open]").forEach(r => r.onclick = () => openBDModal(BD[+r.dataset.open]));
 }
 
 function openBDModal(row) {
@@ -1033,7 +1062,7 @@ function openBDModal(row) {
   const groupsHtml = BD_GROUPS.map(g => {
     const fields = BD_FIELDS.filter(f => f[2] === g);
     const inputs = fields.map(([key, label, , type]) => {
-      const val = escape(row ? (row[key] != null ? row[key] : "") : "");
+      const val = escape(row ? (row[label] != null ? row[label] : "") : "");
       const dis = canEdit ? "" : "disabled";
       if (type === "textarea") return `<div class="field" style="grid-column:1/-1"><label>${escape(label)}</label><textarea id="bf_${key}" style="min-height:70px" ${dis}>${val}</textarea></div>`;
       if (type === "secret") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="bf_${key}" style="font-size:11px">👁 mostrar</span></div>`;
@@ -1042,7 +1071,7 @@ function openBDModal(row) {
     }).join("");
     return `<div class="fs">${g}</div><div class="grid2">${inputs}</div>`;
   }).join("");
-  const estOpts = [...new Set(BD.map(x => (x.estado || "").trim()).filter(Boolean))];
+  const estOpts = [...new Set(BD.map(x => bdV(x, "estado")).filter(Boolean))];
   bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <h3 style="margin:0">${row ? (canEdit ? "Editar registro" : "Ficha") : "Nuevo registro"}</h3>
@@ -1061,10 +1090,10 @@ function openBDModal(row) {
   bg.querySelectorAll("[data-rev]").forEach(s => s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "👁 mostrar" : "🙈 ocultar"; } });
   const saveBtn = bg.querySelector("#bf_save");
   if (saveBtn) saveBtn.onclick = async () => {
-    const item = {}; BD_FIELDS.forEach(([key]) => { const i = bg.querySelector("#bf_" + key); item[key] = i ? i.value.trim() : ""; });
-    if (!item.razon && !item.nombre) { bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "Pon al menos el nombre o razón social."; return; }
+    const item = {}; BD_FIELDS.forEach(([key, label]) => { const i = bg.querySelector("#bf_" + key); item[label] = i ? i.value.trim() : ""; });
+    if (!item[BD_KEY2LBL["razon"]] && !item[BD_KEY2LBL["nombre"]]) { bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "Pon al menos el nombre o razón social."; return; }
     saveBtn.disabled = true; bg.querySelector("#bf_msg").className = "msg"; bg.querySelector("#bf_msg").textContent = "Guardando en el Sheet…";
-    const ok = await bdSave(item, row ? row.codigoId : "");
+    const ok = await bdSave(item, row ? bdV(row, "codigoId") : "");
     if (ok) { close(); const m = el("bd_msg"); renderBaseDatos(); setTimeout(() => { const mm = el("bd_msg"); if (mm) { mm.className = "msg ok"; mm.textContent = "✓ Guardado en Google Sheets."; } }, 400); }
     else { saveBtn.disabled = false; bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "No se pudo guardar. Revisa el puente/URL."; }
   };
@@ -1072,7 +1101,7 @@ function openBDModal(row) {
 
 async function bdSave(item, keyValue) {
   const url = await bdBridgeUrl(); if (!url) return false;
-  const payload = { action: "save", key: "Codigo de ID", keyValue: keyValue || item.codigoId || "", item: bdObjToLabels(item) };
+  const payload = { action: "save", key: "Codigo de ID", keyValue: keyValue || item["Codigo de ID"] || "", item: item };
   try { await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) }); return true; }
   catch (e) { return false; }
 }
