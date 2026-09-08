@@ -1,7 +1,9 @@
 // ============================================================
-//  CONTAX CRM — Panel de administración (web)
-//  Presencia · Reportes · Crear usuarios (correo+PIN) · Clave de IA
+//  NUMMEROS by CONTAX — Panel de Administración (web)
+//  VERSIÓN 1  ·  2026-09-07
+//  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
+const APP_VERSION = "1";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -18,6 +20,8 @@ const app2 = initializeApp(window.APP_CONFIG.firebase, "secondary");
 const auth2 = getAuth(app2);
 
 const el = (id) => document.getElementById(id);
+// Muestra la versión en pantalla (todos los <span class="ver">)
+try { document.querySelectorAll(".ver").forEach(e => { e.textContent = "v" + APP_VERSION; e.title = "NUMMEROS · Panel de Administración v" + APP_VERSION; }); document.title = "NUMMEROS · Panel v" + APP_VERSION; } catch (e) {}
 const LOGO_BYC = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" zoomAndPan="magnify" viewBox="11 100 132 40" preserveAspectRatio="xMidYMid meet" version="1.0"><defs><g/><clipPath id="c73c86b7c9"><path d="M 42 24 L 88 24 L 88 37.578125 L 42 37.578125 Z M 42 24 " clip-rule="nonzero"/></clipPath><clipPath id="8b639d37ef"><path d="M 0.542969 4 L 8 4 L 8 13 L 0.542969 13 Z M 0.542969 4 " clip-rule="nonzero"/></clipPath><clipPath id="3c14d60791"><path d="M 4 3 L 7.496094 3 L 7.496094 8 L 4 8 Z M 4 3 " clip-rule="nonzero"/></clipPath><clipPath id="b0db276849"><rect x="0" width="8" y="0" height="9"/></clipPath><clipPath id="ec4969832e"><path d="M 39 4 L 45.378906 4 L 45.378906 11 L 39 11 Z M 39 4 " clip-rule="nonzero"/></clipPath><clipPath id="cd5bf04f37"><rect x="0" width="46" y="0" height="14"/></clipPath><clipPath id="f202c15746"><rect x="0" width="132" y="0" height="38"/></clipPath></defs><g transform="matrix(1, 0, 0, 1, 11, 101)"><g clip-path="url(#f202c15746)"><g fill="currentColor" fill-opacity="1"><g transform="translate(0.701317, 19.527358)"><g><path d="M 10.59375 0 L 4.0625 -11.5625 C 4.1875 -10.4375 4.25 -9.53125 4.25 -8.84375 L 4.25 0 L 1.453125 0 L 1.453125 -15 L 5.046875 -15 L 11.6875 -3.359375 C 11.550781 -4.429688 11.484375 -5.40625 11.484375 -6.28125 L 11.484375 -15 L 14.28125 -15 L 14.28125 0 Z M 10.59375 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(16.44427, 19.527358)"><g><path d="M 7.703125 0.21875 C 5.628906 0.21875 4.046875 -0.285156 2.953125 -1.296875 C 1.859375 -2.304688 1.3125 -3.75 1.3125 -5.625 L 1.3125 -15 L 4.453125 -15 L 4.453125 -5.875 C 4.453125 -4.6875 4.734375 -3.785156 5.296875 -3.171875 C 5.859375 -2.554688 6.6875 -2.25 7.78125 -2.25 C 8.90625 -2.25 9.769531 -2.566406 10.375 -3.203125 C 10.976562 -3.847656 11.28125 -4.769531 11.28125 -5.96875 L 11.28125 -15 L 14.421875 -15 L 14.421875 -5.78125 C 14.421875 -3.875 13.832031 -2.394531 12.65625 -1.34375 C 11.476562 -0.300781 9.828125 0.21875 7.703125 0.21875 Z M 7.703125 0.21875 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(32.187223, 19.527358)"><g><path d="M 13.921875 0 L 13.921875 -9.09375 C 13.921875 -9.300781 13.921875 -9.503906 13.921875 -9.703125 C 13.929688 -9.910156 13.96875 -10.796875 14.03125 -12.359375 C 13.519531 -10.453125 13.144531 -9.125 12.90625 -8.375 L 10.203125 0 L 7.96875 0 L 5.265625 -8.375 L 4.125 -12.359375 C 4.207031 -10.710938 4.25 -9.625 4.25 -9.09375 L 4.25 0 L 1.453125 0 L 1.453125 -15 L 5.671875 -15 L 8.34375 -6.609375 L 8.578125 -5.796875 L 9.09375 -3.796875 L 9.765625 -6.203125 L 12.53125 -15 L 16.703125 -15 L 16.703125 0 Z M 13.921875 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(50.346431, 19.527358)"><g><path d="M 13.921875 0 L 13.921875 -9.09375 C 13.921875 -9.300781 13.921875 -9.503906 13.921875 -9.703125 C 13.929688 -9.910156 13.96875 -10.796875 14.03125 -12.359375 C 13.519531 -10.453125 13.144531 -9.125 12.90625 -8.375 L 10.203125 0 L 7.96875 0 L 5.265625 -8.375 L 4.125 -12.359375 C 4.207031 -10.710938 4.25 -9.625 4.25 -9.09375 L 4.25 0 L 1.453125 0 L 1.453125 -15 L 5.671875 -15 L 8.34375 -6.609375 L 8.578125 -5.796875 L 9.09375 -3.796875 L 9.765625 -6.203125 L 12.53125 -15 L 16.703125 -15 L 16.703125 0 Z M 13.921875 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(68.505639, 19.527358)"><g><path d="M 1.453125 0 L 1.453125 -15 L 13.265625 -15 L 13.265625 -12.578125 L 4.59375 -12.578125 L 4.59375 -8.8125 L 12.609375 -8.8125 L 12.609375 -6.375 L 4.59375 -6.375 L 4.59375 -2.421875 L 13.703125 -2.421875 L 13.703125 0 Z M 1.453125 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(83.045778, 19.527358)"><g><path d="M 11.765625 0 L 8.28125 -5.703125 L 4.59375 -5.703125 L 4.59375 0 L 1.453125 0 L 1.453125 -15 L 8.953125 -15 C 10.742188 -15 12.125 -14.613281 13.09375 -13.84375 C 14.070312 -13.082031 14.5625 -11.976562 14.5625 -10.53125 C 14.5625 -9.476562 14.257812 -8.570312 13.65625 -7.8125 C 13.0625 -7.050781 12.257812 -6.550781 11.25 -6.3125 L 15.3125 0 Z M 11.390625 -10.40625 C 11.390625 -11.84375 10.46875 -12.5625 8.625 -12.5625 L 4.59375 -12.5625 L 4.59375 -8.140625 L 8.71875 -8.140625 C 9.59375 -8.140625 10.253906 -8.335938 10.703125 -8.734375 C 11.160156 -9.128906 11.390625 -9.6875 11.390625 -10.40625 Z M 11.390625 -10.40625 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(98.788732, 19.527358)"><g><path d="M 16.046875 -7.578125 C 16.046875 -6.015625 15.738281 -4.640625 15.125 -3.453125 C 14.507812 -2.265625 13.625 -1.351562 12.46875 -0.71875 C 11.320312 -0.09375 9.984375 0.21875 8.453125 0.21875 C 6.085938 0.21875 4.234375 -0.472656 2.890625 -1.859375 C 1.554688 -3.253906 0.890625 -5.160156 0.890625 -7.578125 C 0.890625 -9.984375 1.554688 -11.859375 2.890625 -13.203125 C 4.234375 -14.554688 6.09375 -15.234375 8.46875 -15.234375 C 10.84375 -15.234375 12.695312 -14.550781 14.03125 -13.1875 C 15.375 -11.820312 16.046875 -9.953125 16.046875 -7.578125 Z M 12.84375 -7.578125 C 12.84375 -9.191406 12.457031 -10.457031 11.6875 -11.375 C 10.925781 -12.300781 9.851562 -12.765625 8.46875 -12.765625 C 7.0625 -12.765625 5.972656 -12.304688 5.203125 -11.390625 C 4.441406 -10.472656 4.0625 -9.203125 4.0625 -7.578125 C 4.0625 -5.929688 4.453125 -4.632812 5.234375 -3.6875 C 6.015625 -2.738281 7.085938 -2.265625 8.453125 -2.265625 C 9.859375 -2.265625 10.941406 -2.722656 11.703125 -3.640625 C 12.460938 -4.566406 12.84375 -5.878906 12.84375 -7.578125 Z M 12.84375 -7.578125 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(115.745137, 19.527358)"><g><path d="M 13.703125 -4.328125 C 13.703125 -2.859375 13.15625 -1.734375 12.0625 -0.953125 C 10.96875 -0.171875 9.367188 0.21875 7.265625 0.21875 C 5.335938 0.21875 3.828125 -0.117188 2.734375 -0.796875 C 1.640625 -1.484375 0.9375 -2.519531 0.625 -3.90625 L 3.65625 -4.40625 C 3.863281 -3.613281 4.265625 -3.035156 4.859375 -2.671875 C 5.460938 -2.316406 6.289062 -2.140625 7.34375 -2.140625 C 9.539062 -2.140625 10.640625 -2.804688 10.640625 -4.140625 C 10.640625 -4.566406 10.515625 -4.914062 10.265625 -5.1875 C 10.015625 -5.46875 9.660156 -5.703125 9.203125 -5.890625 C 8.742188 -6.078125 7.863281 -6.300781 6.5625 -6.5625 C 5.4375 -6.820312 4.65625 -7.03125 4.21875 -7.1875 C 3.78125 -7.351562 3.382812 -7.539062 3.03125 -7.75 C 2.675781 -7.96875 2.375 -8.226562 2.125 -8.53125 C 1.875 -8.84375 1.675781 -9.203125 1.53125 -9.609375 C 1.394531 -10.023438 1.328125 -10.5 1.328125 -11.03125 C 1.328125 -12.382812 1.835938 -13.421875 2.859375 -14.140625 C 3.878906 -14.867188 5.363281 -15.234375 7.3125 -15.234375 C 9.164062 -15.234375 10.554688 -14.941406 11.484375 -14.359375 C 12.421875 -13.773438 13.023438 -12.8125 13.296875 -11.46875 L 10.25 -11.0625 C 10.09375 -11.707031 9.773438 -12.191406 9.296875 -12.515625 C 8.816406 -12.835938 8.132812 -13 7.25 -13 C 5.34375 -13 4.390625 -12.40625 4.390625 -11.21875 C 4.390625 -10.820312 4.488281 -10.5 4.6875 -10.25 C 4.894531 -10.007812 5.195312 -9.800781 5.59375 -9.625 C 5.988281 -9.445312 6.796875 -9.226562 8.015625 -8.96875 C 9.453125 -8.664062 10.476562 -8.382812 11.09375 -8.125 C 11.71875 -7.863281 12.210938 -7.5625 12.578125 -7.21875 C 12.941406 -6.875 13.21875 -6.460938 13.40625 -5.984375 C 13.601562 -5.503906 13.703125 -4.953125 13.703125 -4.328125 Z M 13.703125 -4.328125 "/></g></g></g><g clip-path="url(#c73c86b7c9)"><g transform="matrix(1, 0, 0, 1, 42, 24)"><g clip-path="url(#cd5bf04f37)"><g clip-path="url(#8b639d37ef)"><g transform="matrix(1, 0, 0, 1, -0.000000000000021316, 4)"><g clip-path="url(#b0db276849)"><g fill="currentColor" fill-opacity="1"><g transform="translate(0.725152, 6.153239)"><g><path d="M 0.359375 -3.046875 L 0.359375 -4.234375 L 1.328125 -4.234375 L 1.328125 -3.046875 Z M 1.328125 0 L 0.359375 0 L 0.359375 -3.0625 L 1.328125 -3.0625 Z M 3.0625 -1.140625 L 2.078125 -1.140625 L 2.078125 -1.921875 L 3.0625 -1.921875 Z M 2.078125 -1.921875 C 2.078125 -2.078125 2.046875 -2.195312 1.984375 -2.28125 C 1.929688 -2.375 1.847656 -2.421875 1.734375 -2.421875 L 2.03125 -3.15625 C 2.226562 -3.15625 2.40625 -3.097656 2.5625 -2.984375 C 2.71875 -2.878906 2.835938 -2.734375 2.921875 -2.546875 C 3.015625 -2.367188 3.0625 -2.160156 3.0625 -1.921875 Z M 1.0625 -1.859375 C 1.0625 -2.109375 1.101562 -2.332031 1.1875 -2.53125 C 1.269531 -2.726562 1.382812 -2.878906 1.53125 -2.984375 C 1.675781 -3.097656 1.84375 -3.15625 2.03125 -3.15625 L 1.734375 -2.421875 C 1.609375 -2.421875 1.507812 -2.367188 1.4375 -2.265625 C 1.363281 -2.171875 1.328125 -2.035156 1.328125 -1.859375 Z M 2.078125 -1.140625 L 3.0625 -1.140625 C 3.0625 -0.910156 3.015625 -0.703125 2.921875 -0.515625 C 2.835938 -0.328125 2.71875 -0.175781 2.5625 -0.0625 C 2.40625 0.0390625 2.226562 0.09375 2.03125 0.09375 L 1.734375 -0.640625 C 1.847656 -0.640625 1.929688 -0.679688 1.984375 -0.765625 C 2.046875 -0.859375 2.078125 -0.984375 2.078125 -1.140625 Z M 1.0625 -1.203125 L 1.328125 -1.203125 C 1.328125 -1.023438 1.363281 -0.882812 1.4375 -0.78125 C 1.507812 -0.6875 1.609375 -0.640625 1.734375 -0.640625 L 2.03125 0.09375 C 1.84375 0.09375 1.675781 0.0351562 1.53125 -0.078125 C 1.382812 -0.191406 1.269531 -0.34375 1.1875 -0.53125 C 1.101562 -0.726562 1.0625 -0.953125 1.0625 -1.203125 Z M 1.0625 -1.203125 "/></g></g></g><g clip-path="url(#3c14d60791)"><g fill="currentColor" fill-opacity="1"><g transform="translate(4.049206, 6.153239)"><g><path d="M 0.453125 1.0625 L 0.671875 0.3125 C 0.835938 0.351562 0.96875 0.359375 1.0625 0.328125 C 1.15625 0.304688 1.21875 0.242188 1.25 0.140625 L 2.0625 0.140625 C 1.9375 0.566406 1.738281 0.851562 1.46875 1 C 1.207031 1.15625 0.867188 1.175781 0.453125 1.0625 Z M 1.25 0.140625 L 2.03125 -3.0625 L 3.015625 -3.0625 L 2.0625 0.140625 Z M 1.25 0.53125 L 0.171875 -3.0625 L 1.15625 -3.0625 L 1.703125 -0.84375 Z M 1.25 0.53125 "/></g></g></g></g></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(8.028157, 10.61739)"><g><path d="M 3.875 0.15625 C 3.195312 0.15625 2.597656 0.0078125 2.078125 -0.28125 C 1.554688 -0.570312 1.148438 -0.976562 0.859375 -1.5 C 0.566406 -2.019531 0.421875 -2.609375 0.421875 -3.265625 C 0.421875 -3.929688 0.578125 -4.519531 0.890625 -5.03125 C 1.210938 -5.550781 1.632812 -5.953125 2.15625 -6.234375 C 2.6875 -6.523438 3.265625 -6.671875 3.890625 -6.671875 C 4.421875 -6.671875 4.929688 -6.554688 5.421875 -6.328125 C 5.910156 -6.097656 6.332031 -5.773438 6.6875 -5.359375 L 5.8125 -4.53125 C 5.519531 -4.84375 5.210938 -5.078125 4.890625 -5.234375 C 4.566406 -5.398438 4.222656 -5.484375 3.859375 -5.484375 C 3.453125 -5.484375 3.078125 -5.382812 2.734375 -5.1875 C 2.398438 -5 2.132812 -4.734375 1.9375 -4.390625 C 1.738281 -4.054688 1.640625 -3.679688 1.640625 -3.265625 C 1.640625 -2.816406 1.734375 -2.425781 1.921875 -2.09375 C 2.117188 -1.757812 2.390625 -1.5 2.734375 -1.3125 C 3.078125 -1.125 3.460938 -1.03125 3.890625 -1.03125 C 4.273438 -1.03125 4.613281 -1.101562 4.90625 -1.25 C 5.207031 -1.40625 5.523438 -1.644531 5.859375 -1.96875 L 6.703125 -1.09375 C 6.398438 -0.789062 6.109375 -0.550781 5.828125 -0.375 C 5.554688 -0.195312 5.257812 -0.0664062 4.9375 0.015625 C 4.625 0.109375 4.269531 0.15625 3.875 0.15625 Z M 3.875 0.15625 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(14.911591, 10.61739)"><g><path d="M 3.828125 0.15625 C 3.191406 0.15625 2.613281 0.00390625 2.09375 -0.296875 C 1.582031 -0.609375 1.175781 -1.023438 0.875 -1.546875 C 0.570312 -2.066406 0.421875 -2.640625 0.421875 -3.265625 C 0.421875 -3.890625 0.570312 -4.460938 0.875 -4.984375 C 1.1875 -5.503906 1.601562 -5.914062 2.125 -6.21875 C 2.644531 -6.519531 3.207031 -6.671875 3.8125 -6.671875 C 4.414062 -6.671875 4.972656 -6.519531 5.484375 -6.21875 C 6.003906 -5.914062 6.421875 -5.503906 6.734375 -4.984375 C 7.046875 -4.460938 7.203125 -3.878906 7.203125 -3.234375 C 7.203125 -2.609375 7.050781 -2.035156 6.75 -1.515625 C 6.445312 -1.003906 6.039062 -0.597656 5.53125 -0.296875 C 5.019531 0.00390625 4.453125 0.15625 3.828125 0.15625 Z M 3.828125 -1.03125 C 4.210938 -1.03125 4.566406 -1.128906 4.890625 -1.328125 C 5.210938 -1.523438 5.46875 -1.789062 5.65625 -2.125 C 5.84375 -2.46875 5.9375 -2.84375 5.9375 -3.25 C 5.9375 -3.644531 5.84375 -4.007812 5.65625 -4.34375 C 5.476562 -4.6875 5.222656 -4.960938 4.890625 -5.171875 C 4.566406 -5.378906 4.207031 -5.484375 3.8125 -5.484375 C 3.414062 -5.484375 3.054688 -5.382812 2.734375 -5.1875 C 2.410156 -5 2.148438 -4.734375 1.953125 -4.390625 C 1.765625 -4.054688 1.671875 -3.671875 1.671875 -3.234375 C 1.671875 -2.804688 1.769531 -2.425781 1.96875 -2.09375 C 2.164062 -1.757812 2.425781 -1.5 2.75 -1.3125 C 3.082031 -1.125 3.441406 -1.03125 3.828125 -1.03125 Z M 3.828125 -1.03125 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(22.519645, 10.61739)"><g><path d="M 4.71875 -6.5 L 5.96875 -6.5 L 5.96875 0 L 4.765625 0 L 1.984375 -4.265625 L 1.984375 0 L 0.75 0 L 0.75 -6.5 L 1.9375 -6.5 L 4.71875 -2.234375 Z M 4.71875 -6.5 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(29.221978, 10.61739)"><g><path d="M 1.265625 -5.296875 L 0.09375 -5.296875 L 0.09375 -6.5 L 3.703125 -6.5 L 3.703125 -5.296875 L 2.5 -5.296875 L 2.5 0 L 1.265625 0 Z M 1.265625 -5.296875 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(32.935411, 10.61739)"><g><path d="M 4.984375 0 L 4.484375 -1.34375 L 1.78125 -1.34375 L 1.28125 0 L 0 0 L 2.515625 -6.5 L 3.765625 -6.5 L 6.265625 0 Z M 2.25 -2.5625 L 4.03125 -2.5625 L 3.140625 -4.953125 Z M 2.25 -2.5625 "/></g></g></g><g clip-path="url(#ec4969832e)"><g fill="currentColor" fill-opacity="1"><g transform="translate(39.202998, 10.61739)"><g><path d="M 2.390625 -3.359375 L 0.3125 -6.5 L 1.71875 -6.5 L 3.078125 -4.421875 L 4.453125 -6.5 L 5.84375 -6.5 L 3.78125 -3.359375 L 5.96875 0 L 4.578125 0 L 3.078125 -2.296875 L 1.59375 0 L 0.1875 0 Z M 2.390625 -3.359375 "/></g></g></g></g></g></g></g></g></g></svg>`;
 let ME = null, USERS = [], CHATS = [];
 
@@ -929,16 +933,32 @@ let BD = [], bdHeader = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded 
 // Lee un campo por su clave interna (busca la etiqueta del Sheet)
 function bdV(r, key) { const lbl = BD_KEY2LBL[key]; const v = r && lbl != null ? r[lbl] : ""; return String(v == null ? "" : v).trim(); }
 
-// Clasifica el "Estado Usuario" — activo/inactivo/lista negra, con color
+// Los 6 estados definidos por CONTAX (clave, etiqueta corta, color)
+// Solo "ACTIVO" son clientes reales. "Suscripcion de facturacion" NO es cliente.
+const BD_ESTADO_DEFS = [
+  ["activo",       "Clientes activos",     "ok"],
+  ["facturacion",  "Por facturacion",      "mut"],
+  ["inactivo",     "Clientes inactivos",   "off"],
+  ["nit_baja",     "Cerraron NIT",         "off"],
+  ["susc_inact",   "Suscripcion inactiva", "off"],
+  ["lista_negra",  "Lista negra",          "danger"]
+];
+const BD_ESTADO_LBL = {}; BD_ESTADO_DEFS.forEach(function (d) { BD_ESTADO_LBL[d[0]] = d[1]; });
+
+// Clasifica el "Estado Usuario" en uno de los 6 grupos, con su color
 function bdEstadoInfo(r) {
   const raw = bdV(r, "estado");
-  const u = raw.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  let cls = "off";           // gris = inactivo por defecto
-  if (u === "ACTIVO") cls = "ok";
-  else if (u.indexOf("SUSCRIPCION") >= 0 || u.indexOf("FACTURACION") >= 0) cls = "ok"; // activo (facturando)
-  else if (u.indexOf("LISTA NEGRA") >= 0) cls = "danger";
-  // CLIENTE INACTIVO, INACTIVO SOLICITADO, vacío → off
-  return { raw: raw, cls: cls, activo: cls === "ok" };
+  const u = raw.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+  let g;
+  if (u === "ACTIVO") g = "activo";
+  else if (u.indexOf("LISTA NEGRA") >= 0) g = "lista_negra";
+  else if (u.indexOf("SUSCRIP") >= 0 && u.indexOf("INACTIV") >= 0) g = "susc_inact";
+  else if (u.indexOf("SUSCRIP") >= 0 || u.indexOf("FACTURACION") >= 0) g = "facturacion";
+  else if (u.indexOf("SOLICITAD") >= 0) g = "nit_baja";
+  else if (u.indexOf("INACTIV") >= 0) g = "inactivo";
+  else g = raw ? "inactivo" : "otro";
+  const cls = g === "activo" ? "ok" : g === "lista_negra" ? "danger" : g === "facturacion" ? "mut" : "off";
+  return { raw: raw, grupo: g, cls: cls, activo: g === "activo" };
 }
 function bdIsActivo(r) { return bdEstadoInfo(r).activo; }
 function bdMoney(v) { let s = String(v == null ? "" : v).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".").replace(/[^\d.]/g, ""); const n = parseFloat(s); return isNaN(n) ? 0 : n; }
@@ -999,9 +1019,10 @@ function paintBaseDatos() {
   const tipos = [...new Set(BD.map(r => bdV(r, "tipo")).filter(Boolean))].sort();
   const estados = [...new Set(BD.map(r => bdV(r, "estado")).filter(Boolean))].sort();
   const list = BD.filter(r => {
-    if (bdEstado === "__activo" && !bdIsActivo(r)) return false;
-    if (bdEstado === "__inactivo" && bdIsActivo(r)) return false;
-    if (bdEstado && bdEstado.indexOf("__") !== 0 && bdV(r, "estado") !== bdEstado) return false;
+    if (bdEstado) {
+      if (bdEstado.indexOf("g:") === 0) { if (bdEstadoInfo(r).grupo !== bdEstado.slice(2)) return false; }
+      else if (bdV(r, "estado") !== bdEstado) return false;
+    }
     if (bdTipo && bdV(r, "tipo") !== bdTipo) return false;
     if (term) {
       let hay = false;
@@ -1010,33 +1031,41 @@ function paintBaseDatos() {
     }
     return true;
   });
-  const total = BD.length, activos = BD.filter(bdIsActivo).length;
+  const counts = { activo: 0, facturacion: 0, inactivo: 0, nit_baja: 0, susc_inact: 0, lista_negra: 0, otro: 0 };
+  BD.forEach(r => { counts[bdEstadoInfo(r).grupo] = (counts[bdEstadoInfo(r).grupo] || 0) + 1; });
+  const total = BD.length, activos = counts.activo;
   const ingreso = BD.filter(bdIsActivo).reduce((s, r) => s + bdMoney(bdV(r, "costo")), 0);
   // Cabecera: todas las columnas del Sheet + una fija al final para "Editar/Ver"
   const thead = `<tr>${bdHeader.map(h => `<th>${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
+  const rowCls = { inactivo: "bd-inact", nit_baja: "bd-inact", susc_inact: "bd-inact", lista_negra: "bd-negra" };
   const rows = list.map(r => {
+    const info = bdEstadoInfo(r);
     const tds = bdHeader.map(lbl => {
       const val = String(r[lbl] == null ? "" : r[lbl]);
       if (lbl === ESTADO_LBL) {
-        const info = bdEstadoInfo(r);
         return `<td><span class="badge ${info.cls}">${escape(info.raw || "—")}</span></td>`;
       }
       return `<td title="${escape(val)}">${escape(val) || "<span style='color:var(--muted)'>—</span>"}</td>`;
     }).join("");
-    return `<tr data-open="${r._i}">${tds}<td class="bd-actioncol"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`;
+    const cls = rowCls[info.grupo] || "";
+    return `<tr data-open="${r._i}" class="${cls}">${tds}<td class="bd-actioncol"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`;
   }).join("");
   const colspan = bdHeader.length + 1;
   el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
     <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets, con las ${bdHeader.length} columnas tal cual. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí. 🔄</p>
     <div class="kpis">
       <div class="kpi"><div class="n">${total}</div><div class="l">Registros</div></div>
-      <div class="kpi"><div class="n" style="color:var(--green)">${activos}</div><div class="l">Activos</div></div>
-      <div class="kpi"><div class="n" style="color:var(--warn)">${total - activos}</div><div class="l">Inactivos</div></div>
+      <div class="kpi bd-kpi" data-gfilter="activo" title="Filtrar"><div class="n" style="color:var(--green)">${counts.activo}</div><div class="l">Clientes activos <span class="badge ok" style="padding:1px 6px">reales</span></div></div>
+      <div class="kpi bd-kpi" data-gfilter="facturacion" title="Filtrar"><div class="n">${counts.facturacion}</div><div class="l">Por facturación</div></div>
+      <div class="kpi bd-kpi" data-gfilter="inactivo" title="Filtrar"><div class="n">${counts.inactivo}</div><div class="l">Clientes inactivos</div></div>
+      <div class="kpi bd-kpi" data-gfilter="nit_baja" title="Filtrar"><div class="n">${counts.nit_baja}</div><div class="l">Cerraron NIT</div></div>
+      <div class="kpi bd-kpi" data-gfilter="susc_inact" title="Filtrar"><div class="n">${counts.susc_inact}</div><div class="l">Suscripción inactiva</div></div>
+      <div class="kpi bd-kpi" data-gfilter="lista_negra" title="Filtrar"><div class="n" style="color:var(--danger)">${counts.lista_negra}</div><div class="l">Lista negra 🚫</div></div>
       <div class="kpi"><div class="n">${fmtBs2(ingreso)}</div><div class="l">Ingreso mensual (activos)</div></div>
     </div>
     <div class="toolbar">
       <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar en toda la base…" value="${escape(bdFilter)}">
-      <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><option value="__activo">Solo activos</option><option value="__inactivo">Solo inactivos</option>${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</select>
+      <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><optgroup label="Por categoría">${BD_ESTADO_DEFS.map(d => `<option value="g:${d[0]}">${escape(d[1])} (${counts[d[0]] || 0})</option>`).join("")}</optgroup><optgroup label="Texto exacto del Sheet">${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</optgroup></select>
       <select id="bd_tipo" class="mini" style="padding:9px"><option value="">Todos los tipos</option>${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}</select>
       ${canEdit ? '<button class="btn" id="bd_new">＋ Nuevo</button>' : ""}
       <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">🔄 Actualizar</button>
@@ -1051,8 +1080,21 @@ function paintBaseDatos() {
   el("bd_tipo").value = bdTipo; el("bd_tipo").onchange = () => { bdTipo = el("bd_tipo").value; paintBaseDatos(); };
   if (el("bd_new")) el("bd_new").onclick = () => openBDModal(null);
   el("bd_reload").onclick = () => renderBaseDatos();
+  el("v-basedatos").querySelectorAll(".bd-kpi").forEach(k => { k.style.cursor = "pointer"; k.onclick = () => { const g = "g:" + k.dataset.gfilter; bdEstado = (bdEstado === g) ? "" : g; paintBaseDatos(); }; });
   el("v-basedatos").querySelectorAll("[data-edit]").forEach(b => b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
   el("v-basedatos").querySelectorAll("tr[data-open]").forEach(r => r.onclick = () => openBDModal(BD[+r.dataset.open]));
+  // Resaltado de columna: al pasar el cursor, ilumina toda la columna
+  const tabla = el("v-basedatos").querySelector(".bd-table");
+  if (tabla) {
+    let colActual = -1;
+    const limpiar = () => { tabla.querySelectorAll(".bd-colhi").forEach(c => c.classList.remove("bd-colhi")); colActual = -1; };
+    tabla.addEventListener("mouseover", (e) => {
+      const cel = e.target.closest("td,th"); if (!cel || cel.cellIndex === colActual) return;
+      limpiar(); colActual = cel.cellIndex;
+      tabla.querySelectorAll("tr").forEach(tr => { const c = tr.children[colActual]; if (c) c.classList.add("bd-colhi"); });
+    });
+    tabla.addEventListener("mouseleave", limpiar);
+  }
 }
 
 function openBDModal(row) {
@@ -1071,7 +1113,7 @@ function openBDModal(row) {
     }).join("");
     return `<div class="fs">${g}</div><div class="grid2">${inputs}</div>`;
   }).join("");
-  const estOpts = [...new Set(BD.map(x => bdV(x, "estado")).filter(Boolean))];
+  const estOpts = [...new Set(["ACTIVO", "CLIENTE INACTIVO", "INACTIVO SOLICITADO", "LISTA NEGRA", "SUSCRIPCIÓN DE FACTURACIÓN", "SUSCRIPCIÓN INACTIVA", ...BD.map(x => bdV(x, "estado"))].filter(Boolean))];
   bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <h3 style="margin:0">${row ? (canEdit ? "Editar registro" : "Ficha") : "Nuevo registro"}</h3>
