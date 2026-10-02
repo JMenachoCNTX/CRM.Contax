@@ -3,13 +3,13 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "1";
+const APP_VERSION = "2";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 if (!window.APP_CONFIG || !window.APP_CONFIG.firebase) {
-  document.body.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:40px">⚠️ Falta config.js con los datos de Firebase.</div>';
+  document.body.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:40px">Falta config.js con los datos de Firebase.</div>';
   throw new Error("config.js");
 }
 const app = initializeApp(window.APP_CONFIG.firebase);
@@ -19,15 +19,17 @@ const db = getFirestore(app);
 const app2 = initializeApp(window.APP_CONFIG.firebase, "secondary");
 const auth2 = getAuth(app2);
 
-const el = (id) => document.getElementById(id);
+const el = (id) =>document.getElementById(id);
 // Muestra la versión en pantalla (todos los <span class="ver">)
 try { document.querySelectorAll(".ver").forEach(e => { e.textContent = "v" + APP_VERSION; e.title = "NUMMEROS · Panel de Administración v" + APP_VERSION; }); document.title = "NUMMEROS · Panel v" + APP_VERSION; } catch (e) {}
 const LOGO_BYC = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" zoomAndPan="magnify" viewBox="11 100 132 40" preserveAspectRatio="xMidYMid meet" version="1.0"><defs><g/><clipPath id="c73c86b7c9"><path d="M 42 24 L 88 24 L 88 37.578125 L 42 37.578125 Z M 42 24 " clip-rule="nonzero"/></clipPath><clipPath id="8b639d37ef"><path d="M 0.542969 4 L 8 4 L 8 13 L 0.542969 13 Z M 0.542969 4 " clip-rule="nonzero"/></clipPath><clipPath id="3c14d60791"><path d="M 4 3 L 7.496094 3 L 7.496094 8 L 4 8 Z M 4 3 " clip-rule="nonzero"/></clipPath><clipPath id="b0db276849"><rect x="0" width="8" y="0" height="9"/></clipPath><clipPath id="ec4969832e"><path d="M 39 4 L 45.378906 4 L 45.378906 11 L 39 11 Z M 39 4 " clip-rule="nonzero"/></clipPath><clipPath id="cd5bf04f37"><rect x="0" width="46" y="0" height="14"/></clipPath><clipPath id="f202c15746"><rect x="0" width="132" y="0" height="38"/></clipPath></defs><g transform="matrix(1, 0, 0, 1, 11, 101)"><g clip-path="url(#f202c15746)"><g fill="currentColor" fill-opacity="1"><g transform="translate(0.701317, 19.527358)"><g><path d="M 10.59375 0 L 4.0625 -11.5625 C 4.1875 -10.4375 4.25 -9.53125 4.25 -8.84375 L 4.25 0 L 1.453125 0 L 1.453125 -15 L 5.046875 -15 L 11.6875 -3.359375 C 11.550781 -4.429688 11.484375 -5.40625 11.484375 -6.28125 L 11.484375 -15 L 14.28125 -15 L 14.28125 0 Z M 10.59375 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(16.44427, 19.527358)"><g><path d="M 7.703125 0.21875 C 5.628906 0.21875 4.046875 -0.285156 2.953125 -1.296875 C 1.859375 -2.304688 1.3125 -3.75 1.3125 -5.625 L 1.3125 -15 L 4.453125 -15 L 4.453125 -5.875 C 4.453125 -4.6875 4.734375 -3.785156 5.296875 -3.171875 C 5.859375 -2.554688 6.6875 -2.25 7.78125 -2.25 C 8.90625 -2.25 9.769531 -2.566406 10.375 -3.203125 C 10.976562 -3.847656 11.28125 -4.769531 11.28125 -5.96875 L 11.28125 -15 L 14.421875 -15 L 14.421875 -5.78125 C 14.421875 -3.875 13.832031 -2.394531 12.65625 -1.34375 C 11.476562 -0.300781 9.828125 0.21875 7.703125 0.21875 Z M 7.703125 0.21875 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(32.187223, 19.527358)"><g><path d="M 13.921875 0 L 13.921875 -9.09375 C 13.921875 -9.300781 13.921875 -9.503906 13.921875 -9.703125 C 13.929688 -9.910156 13.96875 -10.796875 14.03125 -12.359375 C 13.519531 -10.453125 13.144531 -9.125 12.90625 -8.375 L 10.203125 0 L 7.96875 0 L 5.265625 -8.375 L 4.125 -12.359375 C 4.207031 -10.710938 4.25 -9.625 4.25 -9.09375 L 4.25 0 L 1.453125 0 L 1.453125 -15 L 5.671875 -15 L 8.34375 -6.609375 L 8.578125 -5.796875 L 9.09375 -3.796875 L 9.765625 -6.203125 L 12.53125 -15 L 16.703125 -15 L 16.703125 0 Z M 13.921875 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(50.346431, 19.527358)"><g><path d="M 13.921875 0 L 13.921875 -9.09375 C 13.921875 -9.300781 13.921875 -9.503906 13.921875 -9.703125 C 13.929688 -9.910156 13.96875 -10.796875 14.03125 -12.359375 C 13.519531 -10.453125 13.144531 -9.125 12.90625 -8.375 L 10.203125 0 L 7.96875 0 L 5.265625 -8.375 L 4.125 -12.359375 C 4.207031 -10.710938 4.25 -9.625 4.25 -9.09375 L 4.25 0 L 1.453125 0 L 1.453125 -15 L 5.671875 -15 L 8.34375 -6.609375 L 8.578125 -5.796875 L 9.09375 -3.796875 L 9.765625 -6.203125 L 12.53125 -15 L 16.703125 -15 L 16.703125 0 Z M 13.921875 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(68.505639, 19.527358)"><g><path d="M 1.453125 0 L 1.453125 -15 L 13.265625 -15 L 13.265625 -12.578125 L 4.59375 -12.578125 L 4.59375 -8.8125 L 12.609375 -8.8125 L 12.609375 -6.375 L 4.59375 -6.375 L 4.59375 -2.421875 L 13.703125 -2.421875 L 13.703125 0 Z M 1.453125 0 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(83.045778, 19.527358)"><g><path d="M 11.765625 0 L 8.28125 -5.703125 L 4.59375 -5.703125 L 4.59375 0 L 1.453125 0 L 1.453125 -15 L 8.953125 -15 C 10.742188 -15 12.125 -14.613281 13.09375 -13.84375 C 14.070312 -13.082031 14.5625 -11.976562 14.5625 -10.53125 C 14.5625 -9.476562 14.257812 -8.570312 13.65625 -7.8125 C 13.0625 -7.050781 12.257812 -6.550781 11.25 -6.3125 L 15.3125 0 Z M 11.390625 -10.40625 C 11.390625 -11.84375 10.46875 -12.5625 8.625 -12.5625 L 4.59375 -12.5625 L 4.59375 -8.140625 L 8.71875 -8.140625 C 9.59375 -8.140625 10.253906 -8.335938 10.703125 -8.734375 C 11.160156 -9.128906 11.390625 -9.6875 11.390625 -10.40625 Z M 11.390625 -10.40625 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(98.788732, 19.527358)"><g><path d="M 16.046875 -7.578125 C 16.046875 -6.015625 15.738281 -4.640625 15.125 -3.453125 C 14.507812 -2.265625 13.625 -1.351562 12.46875 -0.71875 C 11.320312 -0.09375 9.984375 0.21875 8.453125 0.21875 C 6.085938 0.21875 4.234375 -0.472656 2.890625 -1.859375 C 1.554688 -3.253906 0.890625 -5.160156 0.890625 -7.578125 C 0.890625 -9.984375 1.554688 -11.859375 2.890625 -13.203125 C 4.234375 -14.554688 6.09375 -15.234375 8.46875 -15.234375 C 10.84375 -15.234375 12.695312 -14.550781 14.03125 -13.1875 C 15.375 -11.820312 16.046875 -9.953125 16.046875 -7.578125 Z M 12.84375 -7.578125 C 12.84375 -9.191406 12.457031 -10.457031 11.6875 -11.375 C 10.925781 -12.300781 9.851562 -12.765625 8.46875 -12.765625 C 7.0625 -12.765625 5.972656 -12.304688 5.203125 -11.390625 C 4.441406 -10.472656 4.0625 -9.203125 4.0625 -7.578125 C 4.0625 -5.929688 4.453125 -4.632812 5.234375 -3.6875 C 6.015625 -2.738281 7.085938 -2.265625 8.453125 -2.265625 C 9.859375 -2.265625 10.941406 -2.722656 11.703125 -3.640625 C 12.460938 -4.566406 12.84375 -5.878906 12.84375 -7.578125 Z M 12.84375 -7.578125 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(115.745137, 19.527358)"><g><path d="M 13.703125 -4.328125 C 13.703125 -2.859375 13.15625 -1.734375 12.0625 -0.953125 C 10.96875 -0.171875 9.367188 0.21875 7.265625 0.21875 C 5.335938 0.21875 3.828125 -0.117188 2.734375 -0.796875 C 1.640625 -1.484375 0.9375 -2.519531 0.625 -3.90625 L 3.65625 -4.40625 C 3.863281 -3.613281 4.265625 -3.035156 4.859375 -2.671875 C 5.460938 -2.316406 6.289062 -2.140625 7.34375 -2.140625 C 9.539062 -2.140625 10.640625 -2.804688 10.640625 -4.140625 C 10.640625 -4.566406 10.515625 -4.914062 10.265625 -5.1875 C 10.015625 -5.46875 9.660156 -5.703125 9.203125 -5.890625 C 8.742188 -6.078125 7.863281 -6.300781 6.5625 -6.5625 C 5.4375 -6.820312 4.65625 -7.03125 4.21875 -7.1875 C 3.78125 -7.351562 3.382812 -7.539062 3.03125 -7.75 C 2.675781 -7.96875 2.375 -8.226562 2.125 -8.53125 C 1.875 -8.84375 1.675781 -9.203125 1.53125 -9.609375 C 1.394531 -10.023438 1.328125 -10.5 1.328125 -11.03125 C 1.328125 -12.382812 1.835938 -13.421875 2.859375 -14.140625 C 3.878906 -14.867188 5.363281 -15.234375 7.3125 -15.234375 C 9.164062 -15.234375 10.554688 -14.941406 11.484375 -14.359375 C 12.421875 -13.773438 13.023438 -12.8125 13.296875 -11.46875 L 10.25 -11.0625 C 10.09375 -11.707031 9.773438 -12.191406 9.296875 -12.515625 C 8.816406 -12.835938 8.132812 -13 7.25 -13 C 5.34375 -13 4.390625 -12.40625 4.390625 -11.21875 C 4.390625 -10.820312 4.488281 -10.5 4.6875 -10.25 C 4.894531 -10.007812 5.195312 -9.800781 5.59375 -9.625 C 5.988281 -9.445312 6.796875 -9.226562 8.015625 -8.96875 C 9.453125 -8.664062 10.476562 -8.382812 11.09375 -8.125 C 11.71875 -7.863281 12.210938 -7.5625 12.578125 -7.21875 C 12.941406 -6.875 13.21875 -6.460938 13.40625 -5.984375 C 13.601562 -5.503906 13.703125 -4.953125 13.703125 -4.328125 Z M 13.703125 -4.328125 "/></g></g></g><g clip-path="url(#c73c86b7c9)"><g transform="matrix(1, 0, 0, 1, 42, 24)"><g clip-path="url(#cd5bf04f37)"><g clip-path="url(#8b639d37ef)"><g transform="matrix(1, 0, 0, 1, -0.000000000000021316, 4)"><g clip-path="url(#b0db276849)"><g fill="currentColor" fill-opacity="1"><g transform="translate(0.725152, 6.153239)"><g><path d="M 0.359375 -3.046875 L 0.359375 -4.234375 L 1.328125 -4.234375 L 1.328125 -3.046875 Z M 1.328125 0 L 0.359375 0 L 0.359375 -3.0625 L 1.328125 -3.0625 Z M 3.0625 -1.140625 L 2.078125 -1.140625 L 2.078125 -1.921875 L 3.0625 -1.921875 Z M 2.078125 -1.921875 C 2.078125 -2.078125 2.046875 -2.195312 1.984375 -2.28125 C 1.929688 -2.375 1.847656 -2.421875 1.734375 -2.421875 L 2.03125 -3.15625 C 2.226562 -3.15625 2.40625 -3.097656 2.5625 -2.984375 C 2.71875 -2.878906 2.835938 -2.734375 2.921875 -2.546875 C 3.015625 -2.367188 3.0625 -2.160156 3.0625 -1.921875 Z M 1.0625 -1.859375 C 1.0625 -2.109375 1.101562 -2.332031 1.1875 -2.53125 C 1.269531 -2.726562 1.382812 -2.878906 1.53125 -2.984375 C 1.675781 -3.097656 1.84375 -3.15625 2.03125 -3.15625 L 1.734375 -2.421875 C 1.609375 -2.421875 1.507812 -2.367188 1.4375 -2.265625 C 1.363281 -2.171875 1.328125 -2.035156 1.328125 -1.859375 Z M 2.078125 -1.140625 L 3.0625 -1.140625 C 3.0625 -0.910156 3.015625 -0.703125 2.921875 -0.515625 C 2.835938 -0.328125 2.71875 -0.175781 2.5625 -0.0625 C 2.40625 0.0390625 2.226562 0.09375 2.03125 0.09375 L 1.734375 -0.640625 C 1.847656 -0.640625 1.929688 -0.679688 1.984375 -0.765625 C 2.046875 -0.859375 2.078125 -0.984375 2.078125 -1.140625 Z M 1.0625 -1.203125 L 1.328125 -1.203125 C 1.328125 -1.023438 1.363281 -0.882812 1.4375 -0.78125 C 1.507812 -0.6875 1.609375 -0.640625 1.734375 -0.640625 L 2.03125 0.09375 C 1.84375 0.09375 1.675781 0.0351562 1.53125 -0.078125 C 1.382812 -0.191406 1.269531 -0.34375 1.1875 -0.53125 C 1.101562 -0.726562 1.0625 -0.953125 1.0625 -1.203125 Z M 1.0625 -1.203125 "/></g></g></g><g clip-path="url(#3c14d60791)"><g fill="currentColor" fill-opacity="1"><g transform="translate(4.049206, 6.153239)"><g><path d="M 0.453125 1.0625 L 0.671875 0.3125 C 0.835938 0.351562 0.96875 0.359375 1.0625 0.328125 C 1.15625 0.304688 1.21875 0.242188 1.25 0.140625 L 2.0625 0.140625 C 1.9375 0.566406 1.738281 0.851562 1.46875 1 C 1.207031 1.15625 0.867188 1.175781 0.453125 1.0625 Z M 1.25 0.140625 L 2.03125 -3.0625 L 3.015625 -3.0625 L 2.0625 0.140625 Z M 1.25 0.53125 L 0.171875 -3.0625 L 1.15625 -3.0625 L 1.703125 -0.84375 Z M 1.25 0.53125 "/></g></g></g></g></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(8.028157, 10.61739)"><g><path d="M 3.875 0.15625 C 3.195312 0.15625 2.597656 0.0078125 2.078125 -0.28125 C 1.554688 -0.570312 1.148438 -0.976562 0.859375 -1.5 C 0.566406 -2.019531 0.421875 -2.609375 0.421875 -3.265625 C 0.421875 -3.929688 0.578125 -4.519531 0.890625 -5.03125 C 1.210938 -5.550781 1.632812 -5.953125 2.15625 -6.234375 C 2.6875 -6.523438 3.265625 -6.671875 3.890625 -6.671875 C 4.421875 -6.671875 4.929688 -6.554688 5.421875 -6.328125 C 5.910156 -6.097656 6.332031 -5.773438 6.6875 -5.359375 L 5.8125 -4.53125 C 5.519531 -4.84375 5.210938 -5.078125 4.890625 -5.234375 C 4.566406 -5.398438 4.222656 -5.484375 3.859375 -5.484375 C 3.453125 -5.484375 3.078125 -5.382812 2.734375 -5.1875 C 2.398438 -5 2.132812 -4.734375 1.9375 -4.390625 C 1.738281 -4.054688 1.640625 -3.679688 1.640625 -3.265625 C 1.640625 -2.816406 1.734375 -2.425781 1.921875 -2.09375 C 2.117188 -1.757812 2.390625 -1.5 2.734375 -1.3125 C 3.078125 -1.125 3.460938 -1.03125 3.890625 -1.03125 C 4.273438 -1.03125 4.613281 -1.101562 4.90625 -1.25 C 5.207031 -1.40625 5.523438 -1.644531 5.859375 -1.96875 L 6.703125 -1.09375 C 6.398438 -0.789062 6.109375 -0.550781 5.828125 -0.375 C 5.554688 -0.195312 5.257812 -0.0664062 4.9375 0.015625 C 4.625 0.109375 4.269531 0.15625 3.875 0.15625 Z M 3.875 0.15625 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(14.911591, 10.61739)"><g><path d="M 3.828125 0.15625 C 3.191406 0.15625 2.613281 0.00390625 2.09375 -0.296875 C 1.582031 -0.609375 1.175781 -1.023438 0.875 -1.546875 C 0.570312 -2.066406 0.421875 -2.640625 0.421875 -3.265625 C 0.421875 -3.890625 0.570312 -4.460938 0.875 -4.984375 C 1.1875 -5.503906 1.601562 -5.914062 2.125 -6.21875 C 2.644531 -6.519531 3.207031 -6.671875 3.8125 -6.671875 C 4.414062 -6.671875 4.972656 -6.519531 5.484375 -6.21875 C 6.003906 -5.914062 6.421875 -5.503906 6.734375 -4.984375 C 7.046875 -4.460938 7.203125 -3.878906 7.203125 -3.234375 C 7.203125 -2.609375 7.050781 -2.035156 6.75 -1.515625 C 6.445312 -1.003906 6.039062 -0.597656 5.53125 -0.296875 C 5.019531 0.00390625 4.453125 0.15625 3.828125 0.15625 Z M 3.828125 -1.03125 C 4.210938 -1.03125 4.566406 -1.128906 4.890625 -1.328125 C 5.210938 -1.523438 5.46875 -1.789062 5.65625 -2.125 C 5.84375 -2.46875 5.9375 -2.84375 5.9375 -3.25 C 5.9375 -3.644531 5.84375 -4.007812 5.65625 -4.34375 C 5.476562 -4.6875 5.222656 -4.960938 4.890625 -5.171875 C 4.566406 -5.378906 4.207031 -5.484375 3.8125 -5.484375 C 3.414062 -5.484375 3.054688 -5.382812 2.734375 -5.1875 C 2.410156 -5 2.148438 -4.734375 1.953125 -4.390625 C 1.765625 -4.054688 1.671875 -3.671875 1.671875 -3.234375 C 1.671875 -2.804688 1.769531 -2.425781 1.96875 -2.09375 C 2.164062 -1.757812 2.425781 -1.5 2.75 -1.3125 C 3.082031 -1.125 3.441406 -1.03125 3.828125 -1.03125 Z M 3.828125 -1.03125 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(22.519645, 10.61739)"><g><path d="M 4.71875 -6.5 L 5.96875 -6.5 L 5.96875 0 L 4.765625 0 L 1.984375 -4.265625 L 1.984375 0 L 0.75 0 L 0.75 -6.5 L 1.9375 -6.5 L 4.71875 -2.234375 Z M 4.71875 -6.5 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(29.221978, 10.61739)"><g><path d="M 1.265625 -5.296875 L 0.09375 -5.296875 L 0.09375 -6.5 L 3.703125 -6.5 L 3.703125 -5.296875 L 2.5 -5.296875 L 2.5 0 L 1.265625 0 Z M 1.265625 -5.296875 "/></g></g></g><g fill="currentColor" fill-opacity="1"><g transform="translate(32.935411, 10.61739)"><g><path d="M 4.984375 0 L 4.484375 -1.34375 L 1.78125 -1.34375 L 1.28125 0 L 0 0 L 2.515625 -6.5 L 3.765625 -6.5 L 6.265625 0 Z M 2.25 -2.5625 L 4.03125 -2.5625 L 3.140625 -4.953125 Z M 2.25 -2.5625 "/></g></g></g><g clip-path="url(#ec4969832e)"><g fill="currentColor" fill-opacity="1"><g transform="translate(39.202998, 10.61739)"><g><path d="M 2.390625 -3.359375 L 0.3125 -6.5 L 1.71875 -6.5 L 3.078125 -4.421875 L 4.453125 -6.5 L 5.84375 -6.5 L 3.78125 -3.359375 L 5.96875 0 L 4.578125 0 L 3.078125 -2.296875 L 1.59375 0 L 0.1875 0 Z M 2.390625 -3.359375 "/></g></g></g></g></g></g></g></g></g></svg>`;
 let ME = null, USERS = [], CHATS = [];
 
 // ---------- Tema ----------
-if (localStorage.getItem("cx-theme") === "light") { document.documentElement.classList.add("light"); }
-function initTheme() { const b = el("themeBtn"); if (!b) return; b.textContent = document.documentElement.classList.contains("light") ? "☀️" : "🌙"; b.onclick = () => { const light = !document.documentElement.classList.contains("light"); document.documentElement.classList.toggle("light", light); localStorage.setItem("cx-theme", light ? "light" : "dark"); b.textContent = light ? "☀️" : "🌙"; }; }
+if (localStorage.getItem("cx-theme") === "dark") { document.documentElement.classList.add("dark"); }
+const CX_SUN = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.5 1.5M17.9 17.9l1.5 1.5M2.5 12h2M19.5 12h2M4.6 19.4l1.5-1.5M17.9 6.1l1.5-1.5"/></svg>';
+const CX_MOON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 7 7 0 1 0 20 14.5Z"/></svg>';
+function initTheme() { const b = el("themeBtn"); if (!b) return; const dark = () =>document.documentElement.classList.contains("dark"); b.innerHTML = dark() ? CX_SUN : CX_MOON; b.onclick = () => { const d = !dark(); document.documentElement.classList.toggle("dark", d); localStorage.setItem("cx-theme", d ? "dark" : "light"); b.innerHTML = d ? CX_SUN : CX_MOON; }; }
 
 // ---------- Login ----------
 el("loginBtn").onclick = async () => {
@@ -40,8 +42,8 @@ el("loginBtn").onclick = async () => {
   finally { el("loginBtn").disabled = false; }
 };
 function traducir(c) { return ({ "auth/invalid-credential": "Correo o contraseña incorrectos.", "auth/user-not-found": "No existe esa cuenta.", "auth/wrong-password": "Contraseña incorrecta.", "auth/invalid-email": "Correo no válido." })[c] || ("Error: " + c); }
-el("logoutBtn").onclick = () => signOut(auth);
-el("agentLogout").onclick = () => signOut(auth);
+el("logoutBtn").onclick = () =>signOut(auth);
+el("agentLogout").onclick = () =>signOut(auth);
 
 // ---------- Roles y permisos del portal ----------
 // groups: 'portal' (Clientes…) · 'crm' (Presencia/Bandeja/Respuestas/Reportes) · 'admin' (Usuarios/Config)
@@ -74,7 +76,7 @@ onAuthStateChanged(auth, async (user) => {
     const ok = access.groups.includes(b.dataset.grp);
     b.classList.toggle("hidden", !ok);
     b.classList.remove("active");
-    b.onclick = () => switchView(b.dataset.v, b);
+    b.onclick = () =>switchView(b.dataset.v, b);
     if (ok && !first) first = b;
   });
   if (first) switchView(first.dataset.v, first);
@@ -82,14 +84,15 @@ onAuthStateChanged(auth, async (user) => {
 
 async function loadAll() {
   USERS = []; CHATS = [];
-  try { (await getDocs(collection(db, "users"))).forEach(d => USERS.push({ uid: d.id, ...d.data() })); } catch (e) {}
-  try { (await getDocs(collection(db, "waChats"))).forEach(d => CHATS.push(d.data())); } catch (e) {}
+  try { (await getDocs(collection(db, "users"))).forEach(d =>USERS.push({ uid: d.id, ...d.data() })); } catch (e) {}
+  try { (await getDocs(collection(db, "waChats"))).forEach(d =>CHATS.push(d.data())); } catch (e) {}
 }
 
 function switchView(v, btn) {
-  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('nav.tabs button').forEach(b =>b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.querySelectorAll('.view').forEach(s => s.classList.remove('active'));
+  try { const _t = document.getElementById("pgTitle"); if (_t) { const _s = btn && btn.querySelector("span"); _t.textContent = _s ? _s.textContent : (v.charAt(0).toUpperCase() + v.slice(1)); } } catch (e) {}
+  document.querySelectorAll('.view').forEach(s =>s.classList.remove('active'));
   el("v-" + v).classList.add("active");
   if (v === "inicio") renderInicio();
   if (v === "clientes") renderClientes();
@@ -147,9 +150,9 @@ async function sheetPush(action, item) {
 }
 async function renderRespuestas() {
   const snap = await getDocs(collection(db, "quickReplies"));
-  QR = []; snap.forEach(d => QR.push({ id: d.id, ...d.data() }));
+  QR = []; snap.forEach(d =>QR.push({ id: d.id, ...d.data() }));
   QR.sort((a, b) => (a.category || "General").localeCompare(b.category || "General") || (Number(a.nro) || 9999) - (Number(b.nro) || 9999) || (a.title || "").localeCompare(b.title || ""));
-  const cats = [...new Set(QR.map(q => q.category || "General"))];
+  const cats = [...new Set(QR.map(q =>q.category || "General"))];
   const term = qrFilter.toLowerCase();
   const list = QR.filter(q => {
     if (qrCatFilter && (q.category || "General") !== qrCatFilter) return false;
@@ -162,15 +165,15 @@ async function renderRespuestas() {
     return `<tr style="border-left:4px solid var(--line)">
     <td>${escape(q.nro || "")}</td>
     <td>${catChip(q.category)}</td>
-    <td><b>${escape(q.title || "")}</b>${q.image ? ' 📷' : ""}${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
-    <td style="color:var(--muted)">${q.text ? escape(q.text.slice(0, 60)) + (q.text.length > 60 ? "…" : "") : (q.image ? "🖼️ (solo imagen)" : "")}</td>
+    <td><b>${escape(q.title || "")}</b>${q.image ? '' : ""}${q.description ? `<div style="color:var(--muted);font-size:12px">${escape(q.description)}</div>` : ""}</td>
+    <td style="color:var(--muted)">${q.text ? escape(q.text.slice(0, 60)) + (q.text.length > 60 ? "…" : "") : (q.image ? "(solo imagen)" : "")}</td>
     <td style="white-space:nowrap"><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`;
   }).join("");
   el("v-respuestas").innerHTML = `<h1>Respuestas rápidas</h1><p class="lead">Créalas y edítalas aquí; se comparten con todo el equipo (y con el Google Sheet, si está conectado).</p>
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-      <input id="qr_search" class="mini" style="padding:8px;min-width:220px" placeholder="🔎 Buscar por nombre o texto…" value="${escape(qrFilter)}">
+      <input id="qr_search" class="mini" style="padding:8px;min-width:220px" placeholder="Buscar por nombre o texto…" value="${escape(qrFilter)}">
       <button class="btn" id="qr_new">＋ Nueva respuesta</button>
-      <button class="btn sec" id="qr_import" style="border:1px solid var(--line)">⬇️ Importar de Google Sheets</button>
+      <button class="btn sec" id="qr_import" style="border:1px solid var(--line)">Importar de Google Sheets</button>
       <span class="msg" id="qr_msg" style="align-self:center"></span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${chips}</div>
@@ -178,12 +181,12 @@ async function renderRespuestas() {
     <table><thead><tr><th>Nro</th><th>Categoría</th><th>Nombre</th><th>Respuesta</th><th></th></tr></thead>
     <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin respuestas con estos filtros.</td></tr>'}</tbody></table>`;
   el("qr_search").oninput = () => { qrFilter = el("qr_search").value; renderRespuestas(); };
-  el("v-respuestas").querySelectorAll(".chip").forEach(c => c.onclick = () => { qrCatFilter = c.dataset.c; renderRespuestas(); });
-  el("qr_new").onclick = () => openQrModal(null);
+  el("v-respuestas").querySelectorAll(".chip").forEach(c =>c.onclick = () => { qrCatFilter = c.dataset.c; renderRespuestas(); });
+  el("qr_new").onclick = () =>openQrModal(null);
   el("qr_import").onclick = importFromSheet;
-  el("v-respuestas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openQrModal(QR.find(x => x.id === b.dataset.edit)));
-  el("v-respuestas").querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
-    const q = QR.find(x => x.id === b.dataset.del); if (!q) return;
+  el("v-respuestas").querySelectorAll("[data-edit]").forEach(b =>b.onclick = () =>openQrModal(QR.find(x =>x.id === b.dataset.edit)));
+  el("v-respuestas").querySelectorAll("[data-del]").forEach(b =>b.onclick = async () => {
+    const q = QR.find(x =>x.id === b.dataset.del); if (!q) return;
     await deleteDoc(doc(db, "quickReplies", q.id)); await sheetPush("delete", q); renderRespuestas();
   });
 }
@@ -198,7 +201,7 @@ function qrWrapSel(ta, a, b) {
 function openQrModal(q) {
   qrEditId = q ? q.id : null;
   let curImage = q && q.image ? q.image : "";
-  const cats = [...new Set(QR.map(x => x.category || "General"))];
+  const cats = [...new Set(QR.map(x =>x.category || "General"))];
   const bg = document.createElement("div");
   bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
   bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:640px;max-width:96vw;max-height:92vh;overflow-y:auto">
@@ -224,7 +227,7 @@ function openQrModal(q) {
     <div class="field">
       <label>Imagen (opcional) — p. ej. tu QR de pago</label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button type="button" class="btn sec" id="f_imgbtn" style="border:1px solid var(--line)">📷 Elegir imagen</button>
+        <button type="button" class="btn sec" id="f_imgbtn" style="border:1px solid var(--line)">Elegir imagen</button>
         <button type="button" class="mini" id="f_imgclear" style="${curImage ? "" : "display:none"}">Quitar</button>
         <span class="note" id="f_imgnote">Se guarda junto a la respuesta. En el CRM podrás copiarla y pegarla en el chat.</span>
       </div>
@@ -235,14 +238,14 @@ function openQrModal(q) {
     <div class="msg" id="f_msg"></div>
   </div>`;
   document.body.appendChild(bg);
-  const close = () => bg.remove();
-  const $ = s => bg.querySelector(s);
+  const close = () =>bg.remove();
+  const $ = s =>bg.querySelector(s);
   bg.onclick = (e) => { if (e.target === bg) close(); };
   $("#f_cancel").onclick = close;
   const ta = $("#f_text");
-  $("#f_b").onclick = () => qrWrapSel(ta, "*");
-  $("#f_i").onclick = () => qrWrapSel(ta, "_");
-  $("#f_s").onclick = () => qrWrapSel(ta, "~");
+  $("#f_b").onclick = () =>qrWrapSel(ta, "*");
+  $("#f_i").onclick = () =>qrWrapSel(ta, "_");
+  $("#f_s").onclick = () =>qrWrapSel(ta, "~");
   // Imagen: elegir, comprimir a PNG y previsualizar
   $("#f_imgbtn").onclick = () => $("#f_imgfile").click();
   $("#f_imgclear").onclick = () => { curImage = ""; $("#f_imgprev").style.display = "none"; $("#f_imgprev").src = ""; $("#f_imgclear").style.display = "none"; $("#f_imgnote").textContent = "Imagen quitada."; };
@@ -260,7 +263,7 @@ function openQrModal(q) {
         $("#f_imgprev").src = curImage; $("#f_imgprev").style.display = "";
         $("#f_imgclear").style.display = "";
         const kb = Math.round(curImage.length * 0.75 / 1024);
-        $("#f_imgnote").textContent = kb > 700 ? `⚠️ Imagen pesada (~${kb} KB). Usa uno más liviano si falla al guardar.` : `Imagen lista (~${kb} KB).`;
+        $("#f_imgnote").textContent = kb > 700 ? `Imagen pesada (~${kb} KB). Usa uno más liviano si falla al guardar.` : `Imagen lista (~${kb} KB).`;
       };
       img.src = rd.result;
     };
@@ -284,7 +287,7 @@ function importFromSheet() {
   const msg = el("qr_msg"); msg.className = "msg";
   loadConfigDoc().then(cfg => {
     const url = (cfg.sheetUrl || "").trim();
-    if (!url) { msg.className = "msg err"; msg.textContent = "Primero pon la URL del puente en ⚙️ Configuración."; return; }
+    if (!url) { msg.className = "msg err"; msg.textContent = "Primero pon la URL del puente en Configuración."; return; }
     msg.textContent = "Importando…";
     const cb = "cxcb_" + Math.abs(url.length);
     const sep = url.indexOf("?") >= 0 ? "&" : "?";
@@ -315,12 +318,12 @@ function importFromSheet() {
 
 // ---------- Bandeja de pendientes ----------
 let bandejaFilter = { status: "", agent: "", label: "" };
-function statusLabel(s) { return ({ nuevo: "🟢 Nuevo", proceso: "🟡 En proceso", cerrado: "⚪ Cerrado" })[s] || "— sin estado —"; }
+function statusLabel(s) { return ({ nuevo: "Nuevo", proceso: "En proceso", cerrado: "Cerrado" })[s] || "— sin estado —"; }
 async function renderBandeja() {
   await loadAll();
-  const agents = USERS.filter(u => u.active);
-  const allLabels = [...new Set(CHATS.flatMap(c => c.labels || []))].sort();
-  const chats = CHATS.map(c => c).filter(c => {
+  const agents = USERS.filter(u =>u.active);
+  const allLabels = [...new Set(CHATS.flatMap(c =>c.labels || []))].sort();
+  const chats = CHATS.map(c =>c).filter(c => {
     if (bandejaFilter.status === "pendiente") { if (c.status !== "nuevo" && c.status !== "proceso") return false; }
     else if (bandejaFilter.status && c.status !== bandejaFilter.status) return false;
     if (bandejaFilter.agent === "__none" && c.assignedTo) return false;
@@ -365,7 +368,7 @@ async function renderPresence() {
   await loadAll();
   const today = new Date().toISOString().slice(0, 10);
   const conn = USERS.filter(online).length;
-  const totalToday = USERS.reduce((s, u) => s + (Number((u.dailyMinutes || {})[today]) || 0), 0);
+  const totalToday = USERS.reduce((s, u) =>s + (Number((u.dailyMinutes || {})[today]) || 0), 0);
   const rows = USERS.map(u => {
     const mins = Number((u.dailyMinutes || {})[today]) || 0;
     return `<tr><td><span class="dot ${online(u) ? "on" : ""}"></span>${escape(u.name || "—")}<div style="color:var(--muted);font-size:12px">${escape(u.email || "")}</div></td>
@@ -391,8 +394,8 @@ async function renderHistorial() {
   const monthKey = new Date().toISOString().slice(0, 7);
   const rows = USERS.map(u => {
     const dm = u.dailyMinutes || {};
-    const week7 = Object.keys(dm).filter(k => days.includes(k)).reduce((s, k) => s + (Number(dm[k]) || 0), 0);
-    const month = Object.keys(dm).filter(k => k.startsWith(monthKey)).reduce((s, k) => s + (Number(dm[k]) || 0), 0);
+    const week7 = Object.keys(dm).filter(k =>days.includes(k)).reduce((s, k) =>s + (Number(dm[k]) || 0), 0);
+    const month = Object.keys(dm).filter(k =>k.startsWith(monthKey)).reduce((s, k) =>s + (Number(dm[k]) || 0), 0);
     const cells = days.map(d => `<td style="text-align:center">${dm[d] ? fmtMin(dm[d]) : "·"}</td>`).join("");
     return `<tr><td>${escape(u.name || u.email)}</td>${cells}<td><b>${fmtMin(week7)}</b></td><td><b>${fmtMin(month)}</b></td></tr>`;
   }).join("");
@@ -411,11 +414,11 @@ async function renderHistorial() {
 async function renderReports() {
   await loadAll();
   const total = CHATS.length;
-  const cerrados = CHATS.filter(c => c.status === "cerrado").length;
-  const pendientes = CHATS.filter(c => c.status === "nuevo" || c.status === "proceso").length;
+  const cerrados = CHATS.filter(c =>c.status === "cerrado").length;
+  const pendientes = CHATS.filter(c =>c.status === "nuevo" || c.status === "proceso").length;
   const sinAsignar = CHATS.filter(c => !c.assignedTo).length;
   const by = {};
-  USERS.forEach(u => by[u.uid] = { name: u.name || u.email, role: u.role, asignados: 0, cerrados: 0, pendientes: 0 });
+  USERS.forEach(u =>by[u.uid] = { name: u.name || u.email, role: u.role, asignados: 0, cerrados: 0, pendientes: 0 });
   CHATS.forEach(c => { if (c.assignedTo && by[c.assignedTo]) { by[c.assignedTo].asignados++; if (c.status === "cerrado") by[c.assignedTo].cerrados++; else if (c.status === "nuevo" || c.status === "proceso") by[c.assignedTo].pendientes++; } });
   const rows = Object.values(by).map(a => `<tr><td>${escape(a.name)}</td><td><span class="pill ${a.role}">${a.role}</span></td><td>${a.asignados}</td><td>${a.pendientes}</td><td>${a.cerrados}</td></tr>`).join("");
   el("v-reports").innerHTML = `<h1>Reportes</h1><p class="lead">Chats atendidos por el equipo (según lo marcado en la extensión).</p>
@@ -442,9 +445,9 @@ async function renderUsers() {
     const pinCell = isAdmin
       ? `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
            <input class="mini pin-in" data-uid="${u.uid}" type="password" value="${escape(pin)}" placeholder="—" style="width:110px">
-           <span class="reveal mini pin-eye" data-uid="${u.uid}" title="Mostrar/ocultar">👁️</span>
+           <span class="reveal mini pin-eye" data-uid="${u.uid}" title="Mostrar/ocultar"></span>
            <button class="mini pin-save" data-uid="${u.uid}" title="Solo anota el PIN aquí (no cambia la contraseña)">Anotar</button>
-           <button class="mini pin-reset" data-uid="${u.uid}" data-email="${escape(u.email || "")}" title="Enviar correo para cambiar la contraseña de verdad">🔑 Restablecer</button>
+           <button class="mini pin-reset" data-uid="${u.uid}" data-email="${escape(u.email || "")}" title="Enviar correo para cambiar la contraseña de verdad">Restablecer</button>
          </div>`
       : `<span style="color:var(--muted)">—</span>`;
     return `<tr>
@@ -470,8 +473,8 @@ async function renderUsers() {
     </div>
     <table><thead><tr><th>Usuario</th><th>Rol</th><th>PIN / Contraseña</th><th>Estado</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     ${isAdmin ? `<div class="note" style="margin-top:12px;line-height:1.6">
-      🔒 <b>PIN / Contraseña</b> = tu <b>cuaderno privado</b> (solo lo ve el admin). Firebase cifra la contraseña real y nadie la puede leer, así que aquí solo la <b>anotas</b> para recordarla. <b>Anotar NO cambia la contraseña.</b><br>
-      🔑 <b>¿Alguien olvidó su contraseña?</b> Toca <b>Restablecer</b>: le llega un correo a esa cuenta con un enlace para poner una nueva. Cuando la ponga, anótala aquí con el 👁️ para tenerla a mano.<br>
+      <b>PIN / Contraseña</b> = tu <b>cuaderno privado</b> (solo lo ve el admin). Firebase cifra la contraseña real y nadie la puede leer, así que aquí solo la <b>anotas</b>para recordarla. <b>Anotar NO cambia la contraseña.</b><br>
+      <b>¿Alguien olvidó su contraseña?</b>Toca <b>Restablecer</b>: le llega un correo a esa cuenta con un enlace para poner una nueva. Cuando la ponga, anótala aquí con el para tenerla a mano.<br>
       <span style="color:var(--muted)">Nota: para crear usuarios nuevos, el PIN que escribes sí es el de acceso desde el inicio. El problema es solo con los usuarios viejos cuya contraseña ya nadie recuerda.</span>
     </div>` : ""}`;
 
@@ -493,17 +496,17 @@ async function renderUsers() {
       msg.textContent = e.code === "auth/email-already-in-use" ? "Ese correo ya está registrado." : ("Error: " + (e.code || e.message));
     } finally { el("u_create").disabled = false; }
   };
-  document.querySelectorAll(".role-sel").forEach(s => s.onchange = async () => { await updateDoc(doc(db, "users", s.dataset.uid), { role: s.value }); renderUsers(); });
-  document.querySelectorAll("[data-toggle]").forEach(b => b.onclick = async () => { await updateDoc(doc(db, "users", b.dataset.toggle), { active: b.dataset.s !== "true" }); renderUsers(); });
-  document.querySelectorAll(".pin-eye").forEach(e => e.onclick = () => { const i = el("v-users").querySelector(`.pin-in[data-uid="${e.dataset.uid}"]`); if (i) i.type = i.type === "password" ? "text" : "password"; });
-  document.querySelectorAll(".pin-save").forEach(b => b.onclick = async () => {
+  document.querySelectorAll(".role-sel").forEach(s =>s.onchange = async () => { await updateDoc(doc(db, "users", s.dataset.uid), { role: s.value }); renderUsers(); });
+  document.querySelectorAll("[data-toggle]").forEach(b =>b.onclick = async () => { await updateDoc(doc(db, "users", b.dataset.toggle), { active: b.dataset.s !== "true" }); renderUsers(); });
+  document.querySelectorAll(".pin-eye").forEach(e =>e.onclick = () => { const i = el("v-users").querySelector(`.pin-in[data-uid="${e.dataset.uid}"]`); if (i) i.type = i.type === "password" ? "text" : "password"; });
+  document.querySelectorAll(".pin-save").forEach(b =>b.onclick = async () => {
     const uid = b.dataset.uid, i = el("v-users").querySelector(`.pin-in[data-uid="${uid}"]`);
-    const u = USERS.find(x => x.uid === uid) || {};
+    const u = USERS.find(x =>x.uid === uid) || {};
     b.disabled = true; b.textContent = "…";
     try { await setDoc(doc(db, "userPins", uid), { pin: i.value, email: u.email || "", updatedAt: serverTimestamp() }, { merge: true }); b.textContent = "✓"; setTimeout(() => { b.textContent = "Anotar"; b.disabled = false; }, 1200); }
     catch (e) { b.textContent = "Error"; b.disabled = false; }
   });
-  document.querySelectorAll(".pin-reset").forEach(b => b.onclick = async () => {
+  document.querySelectorAll(".pin-reset").forEach(b =>b.onclick = async () => {
     const email = b.dataset.email;
     if (!email) { alert("Ese usuario no tiene correo registrado."); return; }
     if (!confirm(`Se enviará un correo a:\n${email}\n\ncon un enlace para poner una nueva contraseña. La persona (o quien tenga acceso a ese correo) debe abrirlo y elegir la nueva contraseña.\n\n¿Enviar ahora?`)) return;
@@ -545,7 +548,7 @@ async function renderConfig() {
     </div>
     <div class="formcard">
       <h3 style="margin:0 0 6px">Datos de la empresa</h3>
-      <p class="note" style="margin:0 0 12px">El nombre se usa en la variable <code>{empresa}</code> de las respuestas rápidas.</p>
+      <p class="note" style="margin:0 0 12px">El nombre se usa en la variable <code>{empresa}</code>de las respuestas rápidas.</p>
       <label>Nombre de la empresa</label>
       <input id="c_company" placeholder="Ej. CONTAX" value="${escape(cfg.company || "")}">
       <button class="btn" id="c_csave">Guardar empresa</button>
@@ -562,9 +565,9 @@ async function renderConfig() {
       <div class="msg" id="c_smsg"></div>
     </div>
     <div class="formcard">
-      <h3 style="margin:0 0 6px">🗄️ Base de Datos (Google Sheets · BDCONTAX)</h3>
+      <h3 style="margin:0 0 6px">Base de Datos (Google Sheets · BDCONTAX)</h3>
       <p class="note" style="margin:0 0 12px">Pega la URL del "puente" (Apps Script) conectado a tu hoja <b>BDCONTAX</b>.
-      Con esto la pestaña <b>Base de Datos</b> lee y guarda directamente en tu Google Sheet (el Sheet sigue siendo la fuente principal).
+      Con esto la pestaña <b>Base de Datos</b>lee y guarda directamente en tu Google Sheet (el Sheet sigue siendo la fuente principal).
       Sigue la guía <b>GUIA-BASE-DE-DATOS.md</b>.</p>
       <label>URL del puente de la Base de Datos (…/exec)</label>
       <input id="c_bdurl" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.bdUrl || "")}">
@@ -572,10 +575,10 @@ async function renderConfig() {
       <div class="msg" id="c_bdmsg"></div>
     </div>
     <div class="formcard">
-      <h3 style="margin:0 0 6px">🧠 Conocimiento de la empresa (para la IA)</h3>
+      <h3 style="margin:0 0 6px">Conocimiento de la empresa (para la IA)</h3>
       <p class="note" style="margin:0 0 12px">Escribe aquí todo lo que la IA debe saber de tu empresa: qué es CONTAX, servicios y precios,
       formas de pago, horarios, procedimientos, tono de respuesta, datos de contacto, preguntas frecuentes, etc.
-      La IA usará esto como base en <b>Consultar</b>, <b>Sugerir</b>, <b>Mejorar</b> y <b>Resumir</b>, para todo el equipo.</p>
+      La IA usará esto como base en <b>Consultar</b>, <b>Sugerir</b>, <b>Mejorar</b>y <b>Resumir</b>, para todo el equipo.</p>
       <textarea id="c_context" style="width:100%;min-height:220px;padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:13px;line-height:1.5;font-family:inherit" placeholder="Ej:
 CONTAX es una empresa de contabilidad e impuestos en Santa Cruz, Bolivia.
 Servicios: declaraciones mensuales, RCV, balances, trámites SEPREC/SIAT, emisión y verificación de facturas, asesoramiento.
@@ -591,7 +594,7 @@ Contacto: …">${escape(cfg.aiContext || "")}</textarea>
   function fillModels() {
     const p = provSel.value;
     el("c_model").innerHTML = AI_MODELS[p].map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
-    if (curModel && AI_MODELS[p].some(m => m[0] === curModel)) el("c_model").value = curModel;
+    if (curModel && AI_MODELS[p].some(m =>m[0] === curModel)) el("c_model").value = curModel;
     el("c_help").innerHTML = AI_HELP[p];
   }
   fillModels();
@@ -668,7 +671,7 @@ function fmtBs(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { mi
 
 async function loadClientes() {
   CLIENTES = [];
-  try { (await getDocs(collection(db, "clientes"))).forEach(d => CLIENTES.push({ id: d.id, ...d.data() })); } catch (e) {}
+  try { (await getDocs(collection(db, "clientes"))).forEach(d =>CLIENTES.push({ id: d.id, ...d.data() })); } catch (e) {}
   CLIENTES.sort((a, b) => (Number(a.codigoId) || 9e9) - (Number(b.codigoId) || 9e9) || String(a.nombre || "").localeCompare(String(b.nombre || "")));
 }
 
@@ -689,7 +692,7 @@ async function renderClientes() {
   });
   const total = CLIENTES.length;
   const activos = CLIENTES.filter(cliIsActivo).length;
-  const ingreso = CLIENTES.filter(cliIsActivo).reduce((s, c) => s + cliMoney(c.costoMensual), 0);
+  const ingreso = CLIENTES.filter(cliIsActivo).reduce((s, c) =>s + cliMoney(c.costoMensual), 0);
 
   const rows = list.map(c => `<tr class="clienterow" data-open="${c.id}" style="cursor:pointer">
     <td>${escape(c.codigoId || "—")}</td>
@@ -712,7 +715,7 @@ async function renderClientes() {
       <div class="kpi"><div class="n">${fmtBs(ingreso)}</div><div class="l">Ingreso mensual (activos)</div></div>
     </div>
     <div class="toolbar">
-      <input id="cli_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar por nombre, NIT, código, teléfono…" value="${escape(cliFilter)}">
+      <input id="cli_search" class="mini" style="padding:9px;min-width:240px" placeholder="Buscar por nombre, NIT, código, teléfono…" value="${escape(cliFilter)}">
       <select id="cli_estado" class="mini" style="padding:9px">
         <option value="">Todos los estados</option>
         <option value="__activo">Solo activos</option>
@@ -724,8 +727,8 @@ async function renderClientes() {
         ${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}
       </select>
       ${canEdit ? '<button class="btn" id="cli_new">＋ Nuevo cliente</button>' : ""}
-      ${canEdit ? '<button class="btn sec" id="cli_import" style="border:1px solid var(--line)">⬇️ Importar CSV</button>' : ""}
-      <button class="btn sec" id="cli_export" style="border:1px solid var(--line)">⬆️ Exportar CSV</button>
+      ${canEdit ? '<button class="btn sec" id="cli_import" style="border:1px solid var(--line)">Importar CSV</button>' : ""}
+      <button class="btn sec" id="cli_export" style="border:1px solid var(--line)">Exportar CSV</button>
       <span class="msg" id="cli_msg" style="align-self:center"></span>
     </div>
     <div style="overflow-x:auto"><table>
@@ -737,12 +740,12 @@ async function renderClientes() {
   el("cli_search").oninput = () => { cliFilter = el("cli_search").value; renderClientes(); };
   el("cli_estado").value = cliEstado; el("cli_estado").onchange = () => { cliEstado = el("cli_estado").value; renderClientes(); };
   el("cli_tipo").value = cliTipo; el("cli_tipo").onchange = () => { cliTipo = el("cli_tipo").value; renderClientes(); };
-  if (el("cli_new")) el("cli_new").onclick = () => openClienteModal(null);
+  if (el("cli_new")) el("cli_new").onclick = () =>openClienteModal(null);
   if (el("cli_import")) el("cli_import").onclick = importClientesCSV;
   el("cli_export").onclick = exportClientesCSV;
-  el("v-clientes").querySelectorAll("[data-edit]").forEach(b => b.onclick = (e) => { e.stopPropagation(); openClienteModal(CLIENTES.find(x => x.id === b.dataset.edit)); });
-  el("v-clientes").querySelectorAll("[data-del]").forEach(b => b.onclick = (e) => { e.stopPropagation(); delCliente(CLIENTES.find(x => x.id === b.dataset.del)); });
-  el("v-clientes").querySelectorAll("[data-open]").forEach(r => r.onclick = () => openClienteModal(CLIENTES.find(x => x.id === r.dataset.open)));
+  el("v-clientes").querySelectorAll("[data-edit]").forEach(b =>b.onclick = (e) => { e.stopPropagation(); openClienteModal(CLIENTES.find(x =>x.id === b.dataset.edit)); });
+  el("v-clientes").querySelectorAll("[data-del]").forEach(b =>b.onclick = (e) => { e.stopPropagation(); delCliente(CLIENTES.find(x =>x.id === b.dataset.del)); });
+  el("v-clientes").querySelectorAll("[data-open]").forEach(r =>r.onclick = () =>openClienteModal(CLIENTES.find(x =>x.id === r.dataset.open)));
 }
 
 function openClienteModal(c) {
@@ -750,12 +753,12 @@ function openClienteModal(c) {
   const bg = document.createElement("div");
   bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
   const groupsHtml = CLI_GROUPS.map(g => {
-    const fields = CLI_FIELDS.filter(f => f[2] === g);
+    const fields = CLI_FIELDS.filter(f =>f[2] === g);
     const inputs = fields.map(([key, label, , type]) => {
       const val = escape(c ? (c[key] != null ? c[key] : "") : "");
       const dis = canEdit ? "" : "disabled";
       if (type === "textarea") return `<div class="field" style="grid-column:1/-1"><label>${label}</label><textarea id="cf_${key}" style="min-height:70px" ${dis}>${val}</textarea></div>`;
-      if (type === "secret") return `<div class="field"><label>${label}</label><input id="cf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="cf_${key}" style="font-size:11px">👁 mostrar</span></div>`;
+      if (type === "secret") return `<div class="field"><label>${label}</label><input id="cf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="cf_${key}" style="font-size:11px">mostrar</span></div>`;
       if (type === "estado") return `<div class="field"><label>${label}</label><input id="cf_${key}" value="${val}" list="cf_estlist" placeholder="ACTIVO" ${dis}></div>`;
       return `<div class="field"><label>${label}</label><input id="cf_${key}" value="${val}" ${dis}></div>`;
     }).join("");
@@ -769,18 +772,18 @@ function openClienteModal(c) {
     </div>
     <datalist id="cf_estlist">${estOpts.map(e => `<option value="${escape(e)}">`).join("")}</datalist>
     ${groupsHtml}
-    ${c && c.fileUrl ? `<div class="note" style="margin-top:10px">📁 <a href="${escape(c.fileUrl)}" target="_blank" style="color:var(--green)">Abrir carpeta de archivos</a></div>` : ""}
+    ${c && c.fileUrl ? `<div class="note" style="margin-top:10px"><a href="${escape(c.fileUrl)}" target="_blank" style="color:var(--green)">Abrir carpeta de archivos</a></div>` : ""}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
       <button class="btn sec" id="cf_cancel" style="border:1px solid var(--line)">Cerrar</button>
       ${canEdit ? '<button class="btn" id="cf_save">Guardar</button>' : ""}
     </div>
     <div class="msg" id="cf_msg"></div>`;
   document.body.appendChild(bg);
-  const close = () => bg.remove();
+  const close = () =>bg.remove();
   bg.onclick = (e) => { if (e.target === bg) close(); };
   bg.querySelector("#cf_x").onclick = close;
   bg.querySelector("#cf_cancel").onclick = close;
-  bg.querySelectorAll("[data-rev]").forEach(s => s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "👁 mostrar" : "🙈 ocultar"; } });
+  bg.querySelectorAll("[data-rev]").forEach(s =>s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "mostrar" : "ocultar"; } });
   const saveBtn = bg.querySelector("#cf_save");
   if (saveBtn) saveBtn.onclick = async () => {
     const data = {};
@@ -856,7 +859,7 @@ function importClientesCSV() {
     rd.onload = async () => {
       const msg = el("cli_msg"); msg.className = "msg";
       try {
-        const rows = parseCSV(String(rd.result)).filter(r => r.some(x => (x || "").trim() !== ""));
+        const rows = parseCSV(String(rd.result)).filter(r =>r.some(x => (x || "").trim() !== ""));
         if (rows.length < 2) { msg.className = "msg err"; msg.textContent = "El archivo no tiene datos."; return; }
         const header = rows[0].map(headerToKey);
         if (!header.includes("nombre")) { msg.className = "msg err"; msg.textContent = "No encontré la columna de Nombre/Razón Social. ¿Exportaste la hoja BDCONTAX con sus encabezados?"; return; }
@@ -883,12 +886,12 @@ function importClientesCSV() {
   inp.click();
 }
 function exportClientesCSV() {
-  const cols = CLI_FIELDS.map(f => f[0]);
-  const labels = CLI_FIELDS.map(f => f[1]);
+  const cols = CLI_FIELDS.map(f =>f[0]);
+  const labels = CLI_FIELDS.map(f =>f[1]);
   const esc = v => { const s = String(v == null ? "" : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [labels.map(esc).join(",")];
-  CLIENTES.forEach(c => lines.push(cols.map(k => esc(c[k])).join(",")));
-  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  CLIENTES.forEach(c =>lines.push(cols.map(k =>esc(c[k])).join(",")));
+  const blob = new Blob(["" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
   a.download = "clientes-contax.csv"; a.click(); URL.revokeObjectURL(a.href);
 }
@@ -924,9 +927,9 @@ const BD_FIELDS = [
   ["comentarios", "Comentarios", "Adicionales", "textarea"]
 ];
 const BD_GROUPS = ["Cliente", "Actividad", "Accesos", "SEPREC", "Adicionales"];
-const BD_LBL2KEY = {}; BD_FIELDS.forEach(f => BD_LBL2KEY[f[1]] = f[0]);
-const BD_KEY2LBL = {}; BD_FIELDS.forEach(f => BD_KEY2LBL[f[0]] = f[1]);
-const BD_SECRET_LBL = BD_FIELDS.filter(f => f[3] === "secret").map(f => f[1]);
+const BD_LBL2KEY = {}; BD_FIELDS.forEach(f =>BD_LBL2KEY[f[1]] = f[0]);
+const BD_KEY2LBL = {}; BD_FIELDS.forEach(f =>BD_KEY2LBL[f[0]] = f[1]);
+const BD_SECRET_LBL = BD_FIELDS.filter(f =>f[3] === "secret").map(f =>f[1]);
 // Las filas se guardan TAL CUAL vienen del Sheet: claves = etiquetas (títulos).
 let BD = [], bdHeader = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded = false, bdUrlCache = "";
 
@@ -985,25 +988,25 @@ async function renderBaseDatos() {
   const url = await bdBridgeUrl();
   if (!url) {
     el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
-      <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets, dentro del portal. El Sheet sigue siendo la fuente y puedes seguir usándolo normal.</p>
+      <p class="lead">Tu hoja <b>BDCONTAX</b>de Google Sheets, dentro del portal. El Sheet sigue siendo la fuente y puedes seguir usándolo normal.</p>
       <div class="formcard"><h3 style="margin:0 0 8px">Falta conectar tu Google Sheets</h3>
-      <p class="note">Ve a <b>⚙️ Configuración → Base de Datos (Google Sheets)</b> y pega la URL del puente (Apps Script). Te pasé el código para instalarlo en tu hoja.</p>
+      <p class="note">Ve a <b>Configuración → Base de Datos (Google Sheets)</b>y pega la URL del puente (Apps Script). Te pasé el código para instalarlo en tu hoja.</p>
       <button class="btn" onclick="document.querySelector('nav.tabs [data-v=config]').click()">Ir a Configuración</button></div>`;
     return;
   }
-  el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="lead"><span class="cx-spin"></span> Cargando desde Google Sheets…</p>`;
+  el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="lead"><span class="cx-spin"></span>Cargando desde Google Sheets…</p>`;
   bdFetch((data) => {
     if (data.error) {
-      el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="msg err">No se pudo leer el Sheet (${escape(data.error)}). Revisa la URL del puente en ⚙️ Configuración y que el Apps Script esté publicado como "Cualquiera".</p>
+      el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="msg err">No se pudo leer el Sheet (${escape(data.error)}). Revisa la URL del puente en Configuración y que el Apps Script esté publicado como "Cualquiera".</p>
         <button class="btn sec" style="border:1px solid var(--line)">Reintentar</button>`;
-      const b = el("v-basedatos").querySelector("button"); if (b) b.onclick = () => renderBaseDatos();
+      const b = el("v-basedatos").querySelector("button"); if (b) b.onclick = () =>renderBaseDatos();
       return;
     }
     const rows = (data.rows || []);
     BD = rows.filter(r => (bdV(r, "nombre") || bdV(r, "razon") || bdV(r, "codigoId") || bdV(r, "nit")));
     // Orden de columnas TAL CUAL el Sheet (fila 1). Si el puente no lo manda, lo deducimos.
     bdHeader = (data.header && data.header.length) ? data.header
-             : (BD.length ? Object.keys(BD[0]) : BD_FIELDS.map(f => f[1]));
+             : (BD.length ? Object.keys(BD[0]) : BD_FIELDS.map(f =>f[1]));
     bdLoaded = true;
     paintBaseDatos();
   });
@@ -1012,12 +1015,12 @@ async function renderBaseDatos() {
 function paintBaseDatos() {
   const canEdit = canEditClientes();
   // _i estable por índice en BD (antes de construir filas)
-  BD.forEach((r, i) => r._i = i);
+  BD.forEach((r, i) =>r._i = i);
   const term = bdFilter.toLowerCase().trim();
   const ESTADO_LBL = BD_KEY2LBL["estado"];   // "Estado Usuario"
   const TIPO_LBL = BD_KEY2LBL["tipo"];       // "Tipo de Contribuyente"
-  const tipos = [...new Set(BD.map(r => bdV(r, "tipo")).filter(Boolean))].sort();
-  const estados = [...new Set(BD.map(r => bdV(r, "estado")).filter(Boolean))].sort();
+  const tipos = [...new Set(BD.map(r =>bdV(r, "tipo")).filter(Boolean))].sort();
+  const estados = [...new Set(BD.map(r =>bdV(r, "estado")).filter(Boolean))].sort();
   const list = BD.filter(r => {
     if (bdEstado) {
       if (bdEstado.indexOf("g:") === 0) { if (bdEstadoInfo(r).grupo !== bdEstado.slice(2)) return false; }
@@ -1034,7 +1037,7 @@ function paintBaseDatos() {
   const counts = { activo: 0, facturacion: 0, inactivo: 0, nit_baja: 0, susc_inact: 0, lista_negra: 0, otro: 0 };
   BD.forEach(r => { counts[bdEstadoInfo(r).grupo] = (counts[bdEstadoInfo(r).grupo] || 0) + 1; });
   const total = BD.length, activos = counts.activo;
-  const ingreso = BD.filter(bdIsActivo).reduce((s, r) => s + bdMoney(bdV(r, "costo")), 0);
+  const ingreso = BD.filter(bdIsActivo).reduce((s, r) =>s + bdMoney(bdV(r, "costo")), 0);
   // Cabecera: todas las columnas del Sheet + una fija al final para "Editar/Ver"
   const thead = `<tr>${bdHeader.map(h => `<th>${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
   const rowCls = { inactivo: "bd-inact", nit_baja: "bd-inact", susc_inact: "bd-inact", lista_negra: "bd-negra" };
@@ -1052,7 +1055,7 @@ function paintBaseDatos() {
   }).join("");
   const colspan = bdHeader.length + 1;
   el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
-    <p class="lead">Tu hoja <b>BDCONTAX</b> de Google Sheets, con las ${bdHeader.length} columnas tal cual. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí. 🔄</p>
+    <p class="lead">Tu hoja <b>BDCONTAX</b>de Google Sheets, con las ${bdHeader.length} columnas tal cual. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí.</p>
     <div class="kpis">
       <div class="kpi"><div class="n">${total}</div><div class="l">Registros</div></div>
       <div class="kpi bd-kpi" data-gfilter="activo" title="Filtrar"><div class="n" style="color:var(--green)">${counts.activo}</div><div class="l">Clientes activos <span class="badge ok" style="padding:1px 6px">reales</span></div></div>
@@ -1060,15 +1063,15 @@ function paintBaseDatos() {
       <div class="kpi bd-kpi" data-gfilter="inactivo" title="Filtrar"><div class="n">${counts.inactivo}</div><div class="l">Clientes inactivos</div></div>
       <div class="kpi bd-kpi" data-gfilter="nit_baja" title="Filtrar"><div class="n">${counts.nit_baja}</div><div class="l">Cerraron NIT</div></div>
       <div class="kpi bd-kpi" data-gfilter="susc_inact" title="Filtrar"><div class="n">${counts.susc_inact}</div><div class="l">Suscripción inactiva</div></div>
-      <div class="kpi bd-kpi" data-gfilter="lista_negra" title="Filtrar"><div class="n" style="color:var(--danger)">${counts.lista_negra}</div><div class="l">Lista negra 🚫</div></div>
+      <div class="kpi bd-kpi" data-gfilter="lista_negra" title="Filtrar"><div class="n" style="color:var(--danger)">${counts.lista_negra}</div><div class="l">Lista negra</div></div>
       <div class="kpi"><div class="n">${fmtBs2(ingreso)}</div><div class="l">Ingreso mensual (activos)</div></div>
     </div>
     <div class="toolbar">
-      <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar en toda la base…" value="${escape(bdFilter)}">
+      <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="Buscar en toda la base…" value="${escape(bdFilter)}">
       <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><optgroup label="Por categoría">${BD_ESTADO_DEFS.map(d => `<option value="g:${d[0]}">${escape(d[1])} (${counts[d[0]] || 0})</option>`).join("")}</optgroup><optgroup label="Texto exacto del Sheet">${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</optgroup></select>
       <select id="bd_tipo" class="mini" style="padding:9px"><option value="">Todos los tipos</option>${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}</select>
       ${canEdit ? '<button class="btn" id="bd_new">＋ Nuevo</button>' : ""}
-      <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">🔄 Actualizar</button>
+      <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">Actualizar</button>
       <span class="msg" id="bd_msg" style="align-self:center"></span>
     </div>
     <div class="bd-scroll"><table class="bd-table">
@@ -1078,16 +1081,16 @@ function paintBaseDatos() {
   el("bd_search").oninput = () => { bdFilter = el("bd_search").value; paintBaseDatos(); };
   el("bd_estado").value = bdEstado; el("bd_estado").onchange = () => { bdEstado = el("bd_estado").value; paintBaseDatos(); };
   el("bd_tipo").value = bdTipo; el("bd_tipo").onchange = () => { bdTipo = el("bd_tipo").value; paintBaseDatos(); };
-  if (el("bd_new")) el("bd_new").onclick = () => openBDModal(null);
-  el("bd_reload").onclick = () => renderBaseDatos();
+  if (el("bd_new")) el("bd_new").onclick = () =>openBDModal(null);
+  el("bd_reload").onclick = () =>renderBaseDatos();
   el("v-basedatos").querySelectorAll(".bd-kpi").forEach(k => { k.style.cursor = "pointer"; k.onclick = () => { const g = "g:" + k.dataset.gfilter; bdEstado = (bdEstado === g) ? "" : g; paintBaseDatos(); }; });
-  el("v-basedatos").querySelectorAll("[data-edit]").forEach(b => b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
-  el("v-basedatos").querySelectorAll("tr[data-open]").forEach(r => r.onclick = () => openBDModal(BD[+r.dataset.open]));
+  el("v-basedatos").querySelectorAll("[data-edit]").forEach(b =>b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
+  el("v-basedatos").querySelectorAll("tr[data-open]").forEach(r =>r.onclick = () =>openBDModal(BD[+r.dataset.open]));
   // Resaltado de columna: al pasar el cursor, ilumina toda la columna
   const tabla = el("v-basedatos").querySelector(".bd-table");
   if (tabla) {
     let colActual = -1;
-    const limpiar = () => { tabla.querySelectorAll(".bd-colhi").forEach(c => c.classList.remove("bd-colhi")); colActual = -1; };
+    const limpiar = () => { tabla.querySelectorAll(".bd-colhi").forEach(c =>c.classList.remove("bd-colhi")); colActual = -1; };
     tabla.addEventListener("mouseover", (e) => {
       const cel = e.target.closest("td,th"); if (!cel || cel.cellIndex === colActual) return;
       limpiar(); colActual = cel.cellIndex;
@@ -1102,18 +1105,18 @@ function openBDModal(row) {
   const bg = document.createElement("div");
   bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
   const groupsHtml = BD_GROUPS.map(g => {
-    const fields = BD_FIELDS.filter(f => f[2] === g);
+    const fields = BD_FIELDS.filter(f =>f[2] === g);
     const inputs = fields.map(([key, label, , type]) => {
       const val = escape(row ? (row[label] != null ? row[label] : "") : "");
       const dis = canEdit ? "" : "disabled";
       if (type === "textarea") return `<div class="field" style="grid-column:1/-1"><label>${escape(label)}</label><textarea id="bf_${key}" style="min-height:70px" ${dis}>${val}</textarea></div>`;
-      if (type === "secret") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="bf_${key}" style="font-size:11px">👁 mostrar</span></div>`;
+      if (type === "secret") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="bf_${key}" style="font-size:11px">mostrar</span></div>`;
       if (type === "estado") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" value="${val}" list="bf_estlist" placeholder="ACTIVO" ${dis}></div>`;
       return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" value="${val}" ${dis}></div>`;
     }).join("");
     return `<div class="fs">${g}</div><div class="grid2">${inputs}</div>`;
   }).join("");
-  const estOpts = [...new Set(["ACTIVO", "CLIENTE INACTIVO", "INACTIVO SOLICITADO", "LISTA NEGRA", "SUSCRIPCIÓN DE FACTURACIÓN", "SUSCRIPCIÓN INACTIVA", ...BD.map(x => bdV(x, "estado"))].filter(Boolean))];
+  const estOpts = [...new Set(["ACTIVO", "CLIENTE INACTIVO", "INACTIVO SOLICITADO", "LISTA NEGRA", "SUSCRIPCIÓN DE FACTURACIÓN", "SUSCRIPCIÓN INACTIVA", ...BD.map(x =>bdV(x, "estado"))].filter(Boolean))];
   bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <h3 style="margin:0">${row ? (canEdit ? "Editar registro" : "Ficha") : "Nuevo registro"}</h3>
@@ -1125,11 +1128,11 @@ function openBDModal(row) {
       ${canEdit ? '<button class="btn" id="bf_save">Guardar en el Sheet</button>' : ""}</div>
     <div class="msg" id="bf_msg"></div></div>`;
   document.body.appendChild(bg);
-  const close = () => bg.remove();
+  const close = () =>bg.remove();
   bg.onclick = (e) => { if (e.target === bg) close(); };
   bg.querySelector("#bf_x").onclick = close;
   bg.querySelector("#bf_cancel").onclick = close;
-  bg.querySelectorAll("[data-rev]").forEach(s => s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "👁 mostrar" : "🙈 ocultar"; } });
+  bg.querySelectorAll("[data-rev]").forEach(s =>s.onclick = () => { const i = bg.querySelector("#" + s.dataset.rev); if (i) { i.type = i.type === "password" ? "text" : "password"; s.textContent = i.type === "password" ? "mostrar" : "ocultar"; } });
   const saveBtn = bg.querySelector("#bf_save");
   if (saveBtn) saveBtn.onclick = async () => {
     const item = {}; BD_FIELDS.forEach(([key, label]) => { const i = bg.querySelector("#bf_" + key); item[label] = i ? i.value.trim() : ""; });

@@ -1,0 +1,24 @@
+========================================================
+  NUMMEROS by CONTAX — PANEL  ·  Versión 2 (rediseño)
+  Paquete para GITHUB
+========================================================
+Nuevo diseño: barra lateral verde a pantalla completa, paleta
+NUMMEROS, logo nuevo, iconos vectoriales (sin emojis) y modo
+claro/oscuro verde.
+
+TODO lo de este ZIP va a tu repositorio de GitHub (CRM.Contax).
+Reemplaza estos 3 archivos con EXACTAMENTE estos nombres:
+
+  1) index.html  -> reemplaza index.html
+  2) app.js      -> reemplaza app.js
+  3) config.js   -> reemplaza config.js
+
+Dos formas:
+  - Arrastrar los 3 a github.com (confirmar "reemplazar").
+  - O abrir cada uno, copiar todo y pegarlo sobre el mismo archivo.
+
+Luego espera ~1 min y recarga el Panel. Arriba, junto al logo,
+dirá "v2". El botón de la esquina superior cambia claro/oscuro.
+
+Nota: el puente de Google Sheets no cambió. La política de
+privacidad (privacy-policy.html) ya está y no se toca.
