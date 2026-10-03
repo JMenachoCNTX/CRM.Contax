@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function u() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function role() { return u().role; }
+    function active() { return u().active == true; }
+    function isAdmin() { return isSignedIn() && active() && role() == 'admin'; }
+    function isSup() { return isSignedIn() && active() && (role() == 'admin' || role() == 'supervisor'); }
+    function isAgent() { return isSignedIn() && active() && (role() == 'admin' || role() == 'supervisor' || role() == 'agent'); }
+
+    // ---- Roles del PORTAL (nuevos) ----
+    // Estos NO tocan las cajas de la extensión: la extensión sigue usando isAgent()/isSup().
+    // Portal = cualquiera con perfil activo y un rol reconocido del portal.
+    function portalView() {
+      return isSignedIn() && active() &&
+        (role() == 'admin' || role() == 'supervisor' || role() == 'editor'
+         || role() == 'lector' || role() == 'cajero');
+    }
+    function portalEdit() {
+      return isSignedIn() && active() &&
+        (role() == 'admin' || role() == 'supervisor' || role() == 'editor' || role() == 'cajero');
+    }
+
+    match /users/{uid} {
+      allow read: if isAgent() || portalView() || (isSignedIn() && request.auth.uid == uid);
+      // El admin crea usuarios; o auto-registro como agente pendiente
+      allow create: if isAdmin()
+                    || (isSignedIn() && request.auth.uid == uid
+                        && request.resource.data.role == 'agent'
+                        && request.resource.data.active == false);
+      // El admin gestiona todo; el propio usuario edita su firma/última conexión sin tocar rol ni estado
+      allow update: if isAdmin()
+                    || (isSignedIn() && request.auth.uid == uid
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.active == resource.data.active);
+      allow delete: if isAdmin();
+    }
+
+    // Configuración compartida (clave de IA, URLs de puentes, conocimiento IA,
+    // texto de tarifas). Todos leen; solo admin escribe.
+    match /config/{id} {
+      allow read: if isAgent() || portalView();
+      allow write: if isAdmin();
+    }
+
+    // Respuestas rápidas compartidas
+    match /quickReplies/{id} {
+      allow read: if isAgent();
+      allow create, update: if isAgent();
+      allow delete: if isSup();
+    }
+
+    // Chats de WhatsApp (notas, etiquetas, estado, quién atiende)
+    match /waChats/{id} {
+      allow read: if isAgent();
+      allow create, update: if isAgent();
+      allow delete: if isSup();
+    }
+
+    // Colecciones antiguas del panel (se conservan)
+    match /contacts/{id} {
+      allow read: if isSup() || (isAgent() && (resource.data.assignedTo == request.auth.uid || resource.data.assignedTo == null));
+      allow create: if isAgent();
+      allow update: if isSup() || (isAgent() && (resource.data.assignedTo == request.auth.uid || resource.data.assignedTo == null));
+      allow delete: if isSup();
+      match /notes/{nid} {
+        allow read: if isAgent();
+        allow create: if isAgent() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSup() || (isAgent() && resource.data.authorId == request.auth.uid);
+      }
+    }
+    // Recordatorios personales de cada agente
+    match /reminders/{id} {
+      allow read: if isAgent() && resource.data.userId == request.auth.uid;
+      allow create: if isAgent() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAgent() && resource.data.userId == request.auth.uid;
+    }
+
+    match /activity/{id} {
+      allow read: if isSup() || (isAgent() && resource.data.userId == request.auth.uid);
+      allow create: if isAgent() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ============================================================
+    //  PORTAL CONTAX (nuevo) — cajas NUEVAS, separadas de la extensión
+    // ============================================================
+
+    // Base de datos de clientes (BDCONTAX)
+    // La extensión (agentes) la LEE para mostrar la ficha del cliente en WhatsApp,
+    // y puede cambiar ÚNICAMENTE el campo "estadoUsuario" (nada más: ni contraseñas ni datos).
+    match /clientes/{id} {
+      allow read: if portalView() || isAgent();
+      allow create, update: if portalEdit();
+      allow update: if isAgent()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estadoUsuario']);
+      allow delete: if isAdmin();     // borrar clientes solo el admin (seguridad)
+    }
+
+    // PINs de acceso guardados (solo para recordarlos). SOLO el admin puede leer/escribir.
+    match /userPins/{uid} {
+      allow read, write: if isAdmin();
+    }
+
+    // Base de Datos migrada a Firebase (BDCONTAX en Firestore)
+    // La ve el portal y la extensión (agentes); editan/crean los roles de
+    // edición; borra solo el admin.
+    match /bdclientes/{id} {
+      allow read: if portalView() || isAgent();
+      allow create, update: if portalEdit();
+      allow delete: if isAdmin();
+    }
+
+    // ----- Tarifas y servicios (pestaña Tarifas · v3) -----
+    // Las ve todo el portal; además la extensión (agentes) podrá leerlas
+    // para cotizar precios en WhatsApp. Gestiona: editor/cajero/sup/admin.
+    match /tarifas/{id} {
+      allow read: if portalView() || isAgent();
+      allow create, update, delete: if portalEdit();
+    }
+
+    // ----- Recepciones (pagos, recibos, estados de listas, arqueo · v4/v6) -----
+    // Las ve el portal; el cajero/editor/sup/admin registra pagos, cambia
+    // estados en las listas y marca conciliado en Arqueo. Borrar: solo admin.
+    // La extensión (agentes) también la LEE (avisos de pendientes) y puede
+    // CREAR un pago registrado desde el chat de WhatsApp. Editar/borrar: portal.
+    match /recepciones/{id} {
+      allow read: if portalView() || isAgent();
+      allow create: if portalEdit() || isAgent();
+      allow update: if portalEdit();
+      allow delete: if isAdmin();
+    }
+
+    // ----- Eventos del calendario (pestaña Calendario · v5) -----
+    // Agenda compartida del equipo. La ve todo el portal; crean/editan/borran
+    // los roles de edición (el rol 'lector' solo puede ver).
+    match /eventos/{id} {
+      allow read: if portalView();
+      allow create, update, delete: if portalEdit();
+    }
+
+    // ----- Egresos / gastos de la empresa (pestaña Egresos) -----
+    // Los ve el portal; registran/editan los roles de edición; borra solo admin.
+    match /egresos/{id} {
+      allow read: if portalView();
+      allow create, update: if portalEdit();
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,64 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v13
+ Migración de la Base de Datos a Firebase (dejar Google Sheets)
+===============================================================
+
+QUÉ HACE
+--------
+Ahora la Base de Datos puede vivir en Firebase (rápida) en vez de leerse
+cada vez del Google Sheet. Tú eliges cuándo migrar, con un botón.
+
+CÓMO MIGRAR (una sola vez, el administrador):
+ 1) Sube esta versión v13 a GitHub (index.html, app.js, config.js).
+ 2) Publica las reglas de Firestore actualizadas (abajo: colección
+    nueva "bdclientes"). SIN esto la migración no podrá guardar.
+ 3) Asegúrate de que el puente de la Base de Datos (Google Sheet) esté
+    conectado en Configuración (de ahí se leen los datos para copiar).
+ 4) Entra a Base de Datos → subpestaña "Lista" → botón verde
+    "⬆ Migrar a Firebase". Confirma. Verás "Migrando… X/1039".
+ 5) Al terminar, la Base de Datos queda marcada "⚡ En Firebase" y a
+    partir de ahí lee y guarda en Firebase (ya no usa el Sheet).
+
+DESPUÉS DE MIGRAR
+-----------------
+ • Editar/crear clientes se guarda en Firebase al instante (rápido).
+ • El buscador y los filtros son instantáneos.
+ • El Google Sheet NO se borra: queda como respaldo histórico. Ya no
+   se actualiza solo (si editas el Sheet, esos cambios ya no entran al
+   panel; todo se maneja desde el panel).
+ • Si algún día quieres volver al Sheet, se puede (avísame).
+
+SEGURIDAD
+---------
+ • La migración NO borra nada: solo COPIA del Sheet a Firebase.
+ • Si la corres dos veces, actualiza los mismos registros (no duplica,
+   usa el Código de ID como llave).
+
+
+===============================================================
+ REGLAS DE FIRESTORE — colección nueva "bdclientes"
+===============================================================
+Republica el firestore-rules-COMPLETO.txt incluido. El bloque nuevo es:
+
+    match /bdclientes/{id} {
+      allow read: if portalView() || isAgent();
+      allow create, update: if portalEdit();
+      allow delete: if isAdmin();
+    }
+
+
+NOTA SOBRE EL CRM (WhatsApp)
+----------------------------
+La "Ficha del cliente" del CRM todavía lee de la colección anterior.
+En la próxima versión del CRM la apunto a esta base migrada
+("bdclientes") para que la ficha en WhatsApp siga encontrando a los
+clientes. (Te lo aviso para que no te extrañe si por ahora la ficha
+del CRM no los encuentra.)
+
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js       → Panel v13 (súbelo a GitHub)
+ - firestore-rules-COMPLETO.txt         → republica en Firebase
+ - LEEME-v13.txt
+===============================================================
