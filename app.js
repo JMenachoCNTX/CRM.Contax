@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "6";
+const APP_VERSION = "7";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -30,6 +30,11 @@ if (localStorage.getItem("cx-theme") === "dark") { document.documentElement.clas
 const CX_SUN = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.5 1.5M17.9 17.9l1.5 1.5M2.5 12h2M19.5 12h2M4.6 19.4l1.5-1.5M17.9 6.1l1.5-1.5"/></svg>';
 const CX_MOON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 7 7 0 1 0 20 14.5Z"/></svg>';
 function initTheme() { const b = el("themeBtn"); if (!b) return; const dark = () =>document.documentElement.classList.contains("dark"); b.innerHTML = dark() ? CX_SUN : CX_MOON; b.onclick = () => { const d = !dark(); document.documentElement.classList.toggle("dark", d); localStorage.setItem("cx-theme", d ? "dark" : "light"); b.innerHTML = d ? CX_SUN : CX_MOON; }; }
+function initSidebar() {
+  const b = el("sbToggle"); const lay = document.querySelector(".layout"); if (!b || !lay) return;
+  try { if (localStorage.getItem("cx-sb") === "hide") lay.classList.add("sbhide"); } catch (e) {}
+  b.onclick = () => { const h = lay.classList.toggle("sbhide"); try { localStorage.setItem("cx-sb", h ? "hide" : "show"); } catch (e) {} };
+}
 
 // ---------- Login ----------
 el("loginBtn").onclick = async () => {
@@ -71,6 +76,7 @@ onAuthStateChanged(auth, async (user) => {
   el("agentOnly").classList.add("hidden"); el("app").classList.remove("hidden");
   el("who").textContent = `${ME.name || ME.email} · ${ME.role}`;
   initTheme();
+  initSidebar();
   // Mostrar solo las pestañas que el rol puede ver; elegir la primera visible como activa
   let first = null;
   document.querySelectorAll('nav.tabs button').forEach(b => {

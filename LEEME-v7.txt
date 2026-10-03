@@ -1,0 +1,37 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL  ·  Versión v7
+===============================================================
+
+NUEVO EN ESTA VERSIÓN (v7)
+--------------------------
+1) MENÚ OCULTABLE
+   En la barra de arriba (topbar), a la izquierda del título, hay un
+   botón ☰. Al tocarlo se oculta/retrae el menú lateral y el contenido
+   ocupa toda la pantalla. Se vuelve a tocar para mostrarlo.
+   El Panel RECUERDA si lo dejaste oculto o visible (por navegador).
+   En celular, al ocultar el menú desaparece la barra de pestañas y la
+   vista queda a pantalla completa.
+
+2) EFECTO 3D AL PASAR EL CURSOR
+   Los botones del menú ahora se "elevan" al pasar el mouse: se
+   desplazan un poco, se agrandan levemente y proyectan una sombra,
+   dando sensación de relieve/3D. Al hacer clic se "hunden" un toque.
+   (En celular el efecto 3D se desactiva para no estorbar al tocar.)
+
+
+ARCHIVOS DE ESTE PAQUETE
+------------------------
+ - index.html        (Panel v7 — SÚBELO a GitHub)
+ - app.js            (lógica v7 — SÚBELO a GitHub)
+ - config.js         (config v7 — SÚBELO a GitHub)
+ - LEEME-v7.txt       (este archivo)
+
+
+CÓMO ACTUALIZAR EL PANEL (GitHub)
+---------------------------------
+Reemplaza en tu repositorio JMenachoCNTX/CRM.Contax los 3 archivos:
+index.html, app.js y config.js. En 1–2 minutos queda actualizado en:
+  https://jmenachocntx.github.io/CRM.Contax/
+
+No hay cambios de reglas de Firestore en esta versión del Panel.
+===============================================================
