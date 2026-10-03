@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "7";
+const APP_VERSION = "8";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -34,6 +34,10 @@ function initSidebar() {
   const b = el("sbToggle"); const lay = document.querySelector(".layout"); if (!b || !lay) return;
   try { if (localStorage.getItem("cx-sb") === "hide") lay.classList.add("sbhide"); } catch (e) {}
   b.onclick = () => { const h = lay.classList.toggle("sbhide"); try { localStorage.setItem("cx-sb", h ? "hide" : "show"); } catch (e) {} };
+}
+function initFab() {
+  const f = el("cxFab"); if (!f) return;
+  f.onclick = () => { const btn = document.querySelector('nav.tabs button[data-v="asistente"]'); if (btn) btn.click(); };
 }
 
 // ---------- Login ----------
@@ -77,6 +81,7 @@ onAuthStateChanged(auth, async (user) => {
   el("who").textContent = `${ME.name || ME.email} · ${ME.role}`;
   initTheme();
   initSidebar();
+  initFab();
   // Mostrar solo las pestañas que el rol puede ver; elegir la primera visible como activa
   let first = null;
   document.querySelectorAll('nav.tabs button').forEach(b => {
@@ -963,6 +968,10 @@ const BD_KEY2LBL = {}; BD_FIELDS.forEach(f =>BD_KEY2LBL[f[0]] = f[1]);
 const BD_SECRET_LBL = BD_FIELDS.filter(f =>f[3] === "secret").map(f =>f[1]);
 // Las filas se guardan TAL CUAL vienen del Sheet: claves = etiquetas (títulos).
 let BD = [], bdHeader = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded = false, bdUrlCache = "";
+let bdHidden = [];
+try { bdHidden = JSON.parse(localStorage.getItem("bd-hidden") || "[]"); if (!Array.isArray(bdHidden)) bdHidden = []; } catch (e) { bdHidden = []; }
+function bdSaveHidden() { try { localStorage.setItem("bd-hidden", JSON.stringify(bdHidden)); } catch (e) {} }
+function bdVisibleHeader() { return bdHeader.filter(h => bdHidden.indexOf(h) < 0); }
 
 // Lee un campo por su clave interna (busca la etiqueta del Sheet)
 function bdV(r, key) { const lbl = BD_KEY2LBL[key]; const v = r && lbl != null ? r[lbl] : ""; return String(v == null ? "" : v).trim(); }
@@ -997,6 +1006,16 @@ function bdEstadoInfo(r) {
 function bdIsActivo(r) { return bdEstadoInfo(r).activo; }
 function bdMoney(v) { let s = String(v == null ? "" : v).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".").replace(/[^\d.]/g, ""); const n = parseFloat(s); return isNaN(n) ? 0 : n; }
 function fmtBs2(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { maximumFractionDigits: 2 }); }
+// Descarga una copia de respaldo en CSV (se abre en Excel / Google Sheets)
+function downloadCSV(filename, headers, rows) {
+  const cell = v => { let s = String(v == null ? "" : v); if (/[",\n;]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"'; return s; };
+  const lines = [headers.map(cell).join(",")].concat(rows.map(r => r.map(cell).join(",")));
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function hoyISO() { const d = new Date(); return d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0"); }
 
 async function bdBridgeUrl() { const cfg = await loadConfigDoc(); return (cfg.bdUrl || "").trim(); }
 
@@ -1069,12 +1088,13 @@ function paintBaseDatos() {
   BD.forEach(r => { counts[bdEstadoInfo(r).grupo] = (counts[bdEstadoInfo(r).grupo] || 0) + 1; });
   const total = BD.length, activos = counts.activo;
   const ingreso = BD.filter(bdIsActivo).reduce((s, r) =>s + bdMoney(bdV(r, "costo")), 0);
-  // Cabecera: todas las columnas del Sheet + una fija al final para "Editar/Ver"
-  const thead = `<tr>${bdHeader.map(h => `<th>${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
+  // Cabecera: solo las columnas visibles del Sheet + una fija al final para "Editar/Ver"
+  const visHeader = bdVisibleHeader();
+  const thead = `<tr>${visHeader.map(h => `<th>${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
   const rowCls = { inactivo: "bd-inact", nit_baja: "bd-inact", susc_inact: "bd-inact", lista_negra: "bd-negra" };
   const rows = list.map(r => {
     const info = bdEstadoInfo(r);
-    const tds = bdHeader.map(lbl => {
+    const tds = visHeader.map(lbl => {
       const val = String(r[lbl] == null ? "" : r[lbl]);
       if (lbl === ESTADO_LBL) {
         return `<td><span class="badge ${info.cls}">${escape(info.raw || "—")}</span></td>`;
@@ -1084,7 +1104,7 @@ function paintBaseDatos() {
     const cls = rowCls[info.grupo] || "";
     return `<tr data-open="${r._i}" class="${cls}">${tds}<td class="bd-actioncol"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`;
   }).join("");
-  const colspan = bdHeader.length + 1;
+  const colspan = visHeader.length + 1;
   el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
     <p class="lead">Tu hoja <b>BDCONTAX</b>de Google Sheets, con las ${bdHeader.length} columnas tal cual. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí.</p>
     <div class="kpis">
@@ -1102,6 +1122,7 @@ function paintBaseDatos() {
       <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><optgroup label="Por categoría">${BD_ESTADO_DEFS.map(d => `<option value="g:${d[0]}">${escape(d[1])} (${counts[d[0]] || 0})</option>`).join("")}</optgroup><optgroup label="Texto exacto del Sheet">${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</optgroup></select>
       <select id="bd_tipo" class="mini" style="padding:9px"><option value="">Todos los tipos</option>${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}</select>
       ${canEdit ? '<button class="btn" id="bd_new">＋ Nuevo</button>' : ""}
+      <button class="btn sec" id="bd_cols" style="border:1px solid var(--line)">Columnas${bdHidden.length ? ` (${visHeader.length}/${bdHeader.length})` : ""}</button>
       <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">Actualizar</button>
       <span class="msg" id="bd_msg" style="align-self:center"></span>
     </div>
@@ -1113,6 +1134,7 @@ function paintBaseDatos() {
   el("bd_estado").value = bdEstado; el("bd_estado").onchange = () => { bdEstado = el("bd_estado").value; paintBaseDatos(); };
   el("bd_tipo").value = bdTipo; el("bd_tipo").onchange = () => { bdTipo = el("bd_tipo").value; paintBaseDatos(); };
   if (el("bd_new")) el("bd_new").onclick = () =>openBDModal(null);
+  el("bd_cols").onclick = () => openBDColsModal();
   el("bd_reload").onclick = () =>renderBaseDatos();
   el("v-basedatos").querySelectorAll(".bd-kpi").forEach(k => { k.style.cursor = "pointer"; k.onclick = () => { const g = "g:" + k.dataset.gfilter; bdEstado = (bdEstado === g) ? "" : g; paintBaseDatos(); }; });
   el("v-basedatos").querySelectorAll("[data-edit]").forEach(b =>b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
@@ -1131,6 +1153,37 @@ function paintBaseDatos() {
   }
 }
 
+function openBDColsModal() {
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const items = bdHeader.map((h, i) => {
+    const on = bdHidden.indexOf(h) < 0;
+    return `<label style="display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:13px;cursor:pointer">
+      <input type="checkbox" data-col="${escape(h)}" ${on ? "checked" : ""} style="width:auto"> <span style="flex:1">${escape(h)}</span></label>`;
+  }).join("");
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;width:460px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h3 style="margin:0">Columnas visibles</h3><button class="mini" id="bc_x">✕</button></div>
+    <p class="note" style="margin:0 0 12px">Marca las columnas que quieres ver. Las que desmarques se ocultan hasta que las vuelvas a activar (se recuerda en este navegador).</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn sec" id="bc_all" style="flex:1;border:1px solid var(--line)">Mostrar todas</button>
+      <button class="btn sec" id="bc_none" style="flex:1;border:1px solid var(--line)">Ocultar todas</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;overflow-y:auto;flex:1">${items}</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn" id="bc_apply">Aplicar</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = e => { if (e.target === bg) close(); };
+  bg.querySelector("#bc_x").onclick = close;
+  bg.querySelector("#bc_all").onclick = () => bg.querySelectorAll("input[data-col]").forEach(c => c.checked = true);
+  bg.querySelector("#bc_none").onclick = () => bg.querySelectorAll("input[data-col]").forEach(c => c.checked = false);
+  bg.querySelector("#bc_apply").onclick = () => {
+    bdHidden = [...bg.querySelectorAll("input[data-col]")].filter(c => !c.checked).map(c => c.dataset.col);
+    bdSaveHidden(); close(); paintBaseDatos();
+  };
+}
+
 function openBDModal(row) {
   const canEdit = canEditClientes();
   const bg = document.createElement("div");
@@ -1147,7 +1200,7 @@ function openBDModal(row) {
     }).join("");
     return `<div class="fs">${g}</div><div class="grid2">${inputs}</div>`;
   }).join("");
-  const estOpts = [...new Set(["ACTIVO", "CLIENTE INACTIVO", "INACTIVO SOLICITADO", "LISTA NEGRA", "SUSCRIPCIÓN DE FACTURACIÓN", "SUSCRIPCIÓN INACTIVA", ...BD.map(x =>bdV(x, "estado"))].filter(Boolean))];
+  const estOpts = [...new Set(["ACTIVO", "CLIENTE INACTIVO", "INACTIVO SOLICITADO", "LISTA NEGRA", "SUSCRIPCIÓN FACTURACIÓN", ...BD.map(x =>bdV(x, "estado"))].filter(Boolean))];
   bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <h3 style="margin:0">${row ? (canEdit ? "Editar registro" : "Ficha") : "Nuevo registro"}</h3>
@@ -1220,11 +1273,17 @@ function paintTarifas() {
     <div class="toolbar">
       <input id="tar_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar servicio…" value="${escape(tarFilter)}">
       ${admin ? '<button class="btn" id="tar_new">＋ Nuevo servicio</button>' : ''}
+      <button class="btn sec" id="tar_export" style="border:1px solid var(--line)" title="Descargar respaldo en CSV">⬇ Exportar</button>
       <span class="msg" id="tar_msg" style="align-self:center"></span>
     </div>
     <table><thead><tr><th>Servicio</th><th>Precio</th><th>Plazo</th><th>En qué consiste</th><th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="5" style="color:var(--muted)">Aún no hay servicios. ${admin ? 'Crea el primero con “＋ Nuevo servicio”.' : ''}</td></tr>`}</tbody></table>`;
   el("tar_search").oninput = () => { tarFilter = el("tar_search").value; paintTarifas(); };
+  el("tar_export").onclick = () => {
+    const H = ["Nombre", "Categoría", "Precio (Bs)", "Precio texto", "Plazo", "Tipo", "Activo", "Descripción"];
+    const rws = TARIFAS.map(t => [t.nombre || "", t.categoria || "", (t.precio != null ? t.precio : ""), t.precioTexto || "", t.plazo || "", t.tipo || "", (t.activo === false ? "No" : "Sí"), t.descripcion || ""]);
+    downloadCSV("CONTAX-Tarifas-" + hoyISO() + ".csv", H, rws);
+  };
   if (el("tar_new")) el("tar_new").onclick = () => openTarifaModal(null);
   el("v-tarifas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openTarifaModal(TARIFAS.find(x => x.id === b.dataset.edit)));
   el("v-tarifas").querySelectorAll("[data-del]").forEach(b => b.onclick = () => delTarifa(TARIFAS.find(x => x.id === b.dataset.del)));
@@ -1439,12 +1498,18 @@ function paintRecepcion() {
     <div class="toolbar">
       <span class="note" style="align-self:center">Mes:</span>
       <select id="r_mes" class="mini" style="padding:9px">${meses.map(m => `<option value="${m}" ${m === recFilterMes ? 'selected' : ''}>${m}</option>`).join("") || '<option value="">—</option>'}</select>
+      <button class="btn sec" id="r_export" style="border:1px solid var(--line)" title="Descargar respaldo en CSV">⬇ Exportar</button>
     </div>
     <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Servicio</th><th>Método</th><th style="text-align:right">Importe</th><th>Recibo</th><th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted)">Sin pagos en este período.</td></tr>`}</tbody></table>`;
   const sv = el("r_serv");
   if (sv) sv.onchange = () => { const t = TARIFAS.find(x => x.id === sv.value); if (t && t.precio != null && t.precio !== "") el("r_importe").value = t.precio; };
   if (el("r_mes")) el("r_mes").onchange = () => { recFilterMes = el("r_mes").value; paintRecepcion(); };
+  if (el("r_export")) el("r_export").onclick = () => {
+    const H = ["Fecha", "Cliente", "Celular", "Correo", "Servicio", "Categoría", "Tipo", "Método", "Importe (Bs)", "Estado", "Recibo Nro", "Recibo enviado", "Nota", "Registrado por"];
+    const rws = RECEP.map(r => [fmtFecha(r.fechaISO), r.clienteNombre || "", r.clienteCelular || "", r.clienteCorreo || "", r.servicioNombre || "", r.categoria || "", r.tipo || "", r.metodoPago || "", (Number(r.importe) || 0), r.estado || "", r.reciboNro || "", (r.reciboEnviado ? "Sí" : "No"), r.nota || "", r.registradoPorNombre || ""]);
+    downloadCSV("CONTAX-Recepcion-" + hoyISO() + ".csv", H, rws);
+  };
   if (el("r_save")) el("r_save").onclick = registrarPago;
   el("v-recepcion").querySelectorAll("[data-recibo]").forEach(b => b.onclick = () => enviarReciboDe(RECEP.find(x => x.id === b.dataset.recibo)));
   el("v-recepcion").querySelectorAll("[data-delr]").forEach(b => b.onclick = () => delRecepcion(RECEP.find(x => x.id === b.dataset.delr)));

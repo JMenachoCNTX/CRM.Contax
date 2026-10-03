@@ -1,0 +1,55 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL  ·  Versión v8
+===============================================================
+
+NUEVO EN ESTA VERSIÓN (v8)
+--------------------------
+BASE DE DATOS
+ • Selector de columnas: botón "Columnas" en la barra de la Base de
+   Datos. Marcas/desmarcas las columnas que quieres ver; las que
+   ocultes desaparecen hasta que las vuelvas a activar. Se recuerda en
+   tu navegador. Botones rápidos "Mostrar todas" / "Ocultar todas".
+ • Filas más compactas: se redujo el alto de las filas (el tamaño de
+   letra se mantiene), para ver más registros de un vistazo.
+ • Estados: al crear/editar un registro, el campo "Estado del cliente"
+   ahora sugiere EXACTAMENTE estos valores (así las métricas y el
+   dashboard clasifican bien):
+     ACTIVO
+     CLIENTE INACTIVO
+     INACTIVO SOLICITADO
+     LISTA NEGRA
+     SUSCRIPCIÓN FACTURACIÓN
+
+ASISTENTE IA
+ • Burbuja flotante (abajo a la derecha, en todo el Panel) para abrir
+   el Asistente IA de un toque desde cualquier pestaña.
+
+RESPALDOS (TARIFAS Y RECEPCIÓN)
+ • Botón "⬇ Exportar" en Tarifas y en Recepción: descarga una copia en
+   CSV (se abre en Excel o Google Sheets). Úsalo cuando quieras un
+   respaldo propio de tus servicios/precios o de los pagos registrados.
+
+
+¿DÓNDE SE GUARDAN LOS DATOS? (resumen)
+--------------------------------------
+ • Tarifas y Recepción (pagos) se guardan en la base de datos del
+   sistema: Firebase / Firestore, del proyecto "crm-contax" (en los
+   servidores de Google). No es un archivo que se pueda borrar por
+   accidente: Google lo mantiene replicado y disponible 24/7.
+ • La Base de Datos de clientes (BDCONTAX) sigue viviendo en tu Google
+   Sheet (esa es la fuente); el Panel solo la muestra y la edita.
+ • Con los botones "Exportar" ahora puedes bajarte tu propio respaldo
+   cuando quieras. (Ver más detalle en el mensaje del chat.)
+
+
+ARCHIVOS DE ESTE PAQUETE
+------------------------
+ - index.html   (Panel v8 — SÚBELO a GitHub)
+ - app.js       (lógica v8 — SÚBELO a GitHub)
+ - config.js    (config v8 — SÚBELO a GitHub)
+ - LEEME-v8.txt  (este archivo)
+
+Sin cambios de reglas de Firestore en esta versión.
+Actualiza el Panel reemplazando los 3 archivos en GitHub
+(JMenachoCNTX/CRM.Contax).
+===============================================================
