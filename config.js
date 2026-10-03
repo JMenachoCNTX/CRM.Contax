@@ -6,7 +6,7 @@
 //  Estos datos de Firebase son públicos por diseño: la seguridad
 //  real la dan las "reglas" de Firestore, no estas claves.
 // ============================================================
-window.APP_VERSION = "10";
+window.APP_VERSION = "11";
 
 window.APP_CONFIG = {
 

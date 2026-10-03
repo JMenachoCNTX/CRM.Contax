@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "10";
+const APP_VERSION = "11";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -1008,13 +1008,54 @@ const BD_KEY2LBL = {}; BD_FIELDS.forEach(f =>BD_KEY2LBL[f[0]] = f[1]);
 const BD_SECRET_LBL = BD_FIELDS.filter(f =>f[3] === "secret").map(f =>f[1]);
 // Las filas se guardan TAL CUAL vienen del Sheet: claves = etiquetas (títulos).
 let BD = [], bdHeader = [], bdFilter = "", bdEstado = "", bdTipo = "", bdLoaded = false, bdUrlCache = "";
+let bdKey2Header = {};
+// Mapea un encabezado del Sheet (aunque tenga "20." adelante) a la clave interna de BD_FIELDS
+function bdHeaderToKey(h) {
+  const raw = String(h || "").trim().replace(/^\s*\d+\s*[.\-)]\s*/, "");
+  const n = raw.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+  if (n.includes("estado") && n.includes("usuario")) return "estado";
+  if (n.includes("costo")) return "costo";
+  if (n.includes("matricula")) return "estMat";
+  if (n.includes("apertura") && n.includes("nit")) return "fechaNit";
+  if (n.includes("correo") && n.includes("seprec")) return "correoSeprec";
+  if (n.includes("correo")) return "correo";
+  if (n.includes("tipo") && n.includes("contribuy")) return "tipo";
+  if (n.includes("brinda")) return "brinda";
+  if (n.includes("actividad principal")) return "actP";
+  if (n.includes("actividad secundaria")) return "actS";
+  if (n.includes("celular") || n.includes("telefono")) return "celular";
+  if (n.includes("codigo")) return "codigoId";
+  if (n.includes("razon")) return "razon";
+  if (n === "nombre") return "nombre";
+  if (n === "nit") return "nit";
+  if (n.includes("comentario")) return "comentarios";
+  if (n.includes("fecha inactiv")) return "fechaInact";
+  return BD_LBL2KEY[raw] || null;
+}
+function bdBuildKeyMap() {
+  bdKey2Header = {};
+  bdHeader.forEach(h => { const k = bdHeaderToKey(h); if (k && !bdKey2Header[k]) bdKey2Header[k] = h; });
+}
+// Carga la Base de Datos (Sheet) si aún no está, y luego ejecuta cb
+function bdEnsureLoaded(cb) {
+  if (bdLoaded && BD.length) { cb(true); return; }
+  bdFetch((data) => {
+    if (data && !data.error) {
+      const rows = (data.rows || []);
+      bdHeader = (data.header && data.header.length) ? data.header : (rows.length ? Object.keys(rows[0]) : BD_FIELDS.map(f => f[1]));
+      bdBuildKeyMap();
+      BD = rows.filter(r => (bdV(r, "nombre") || bdV(r, "razon") || bdV(r, "codigoId") || bdV(r, "nit")));
+      bdLoaded = true; cb(true);
+    } else { cb(false, data && data.error); }
+  });
+}
 let bdHidden = [];
 try { bdHidden = JSON.parse(localStorage.getItem("bd-hidden") || "[]"); if (!Array.isArray(bdHidden)) bdHidden = []; } catch (e) { bdHidden = []; }
 function bdSaveHidden() { try { localStorage.setItem("bd-hidden", JSON.stringify(bdHidden)); } catch (e) {} }
 function bdVisibleHeader() { return bdHeader.filter(h => bdHidden.indexOf(h) < 0); }
 
 // Lee un campo por su clave interna (busca la etiqueta del Sheet)
-function bdV(r, key) { const lbl = BD_KEY2LBL[key]; const v = r && lbl != null ? r[lbl] : ""; return String(v == null ? "" : v).trim(); }
+function bdV(r, key) { const lbl = (bdKey2Header && bdKey2Header[key]) || BD_KEY2LBL[key]; const v = r && lbl != null ? r[lbl] : ""; return String(v == null ? "" : v).trim(); }
 
 // Los 6 estados definidos por CONTAX (clave, etiqueta corta, color)
 // Solo "ACTIVO" son clientes reales. "Suscripcion de facturacion" NO es cliente.
@@ -1093,10 +1134,11 @@ async function renderBaseDatos() {
       return;
     }
     const rows = (data.rows || []);
-    BD = rows.filter(r => (bdV(r, "nombre") || bdV(r, "razon") || bdV(r, "codigoId") || bdV(r, "nit")));
     // Orden de columnas TAL CUAL el Sheet (fila 1). Si el puente no lo manda, lo deducimos.
     bdHeader = (data.header && data.header.length) ? data.header
-             : (BD.length ? Object.keys(BD[0]) : BD_FIELDS.map(f =>f[1]));
+             : (rows.length ? Object.keys(rows[0]) : BD_FIELDS.map(f =>f[1]));
+    bdBuildKeyMap();
+    BD = rows.filter(r => (bdV(r, "nombre") || bdV(r, "razon") || bdV(r, "codigoId") || bdV(r, "nit")));
     bdLoaded = true;
     paintBaseDatos();
   });
@@ -1535,9 +1577,9 @@ async function postRecibo(rec) {
 // ---------- RECEPCIÓN (completa) ----------
 let recCli = null; // cliente seleccionado para autollenado
 async function renderRecepcion() {
-  el("v-recepcion").innerHTML = `<h1>Recepción</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
-  await loadClientes(); await recepLoad();
-  paintRecepcion();
+  el("v-recepcion").innerHTML = `<h1>Recepción</h1><p class="lead"><span class="cx-spin"></span> Cargando clientes desde la Base de Datos…</p>`;
+  await recepLoad();
+  bdEnsureLoaded(() => { BD.forEach((r, i) => r._i = i); paintRecepcion(); });
 }
 function recFill(id, v) { const e = el(id); if (e) e.value = v == null ? "" : v; }
 function paintRecepcion() {
@@ -1547,7 +1589,7 @@ function paintRecepcion() {
     const nextRec = parseInt(cfg.nextRecep, 10) || 7048;
     const nextCom = parseInt(cfg.nextRecibo, 10) || 7784;
     const mesesOpts = recMesesOpts();
-    const cliOpts = CLIENTES.map(c => `<option value="${c.id}">${escape((c.codigoId ? c.codigoId + " · " : "") + (c.nombre || ""))}</option>`).join("");
+    const cliOpts = BD.map(c => `<option value="${c._i}">${escape((bdV(c, "codigoId") ? bdV(c, "codigoId") + " · " : "") + (bdV(c, "nombre") || bdV(c, "razon") || "(sin nombre)"))}</option>`).join("");
     const meses = [...new Set(RECEP.map(r => (r.mesRecepcion || mesKey(r.fechaISO))).filter(Boolean))];
     const now = new Date();
     const list = RECEP.slice();
@@ -1620,11 +1662,11 @@ function paintRecepcion() {
     // Autollenado al elegir cliente
     const selCli = el("r_cli");
     if (selCli) selCli.onchange = () => {
-      const c = CLIENTES.find(x => x.id === selCli.value); recCli = c || null;
+      const c = BD[+selCli.value]; recCli = c || null;
       if (c) {
-        recFill("r_nombre", c.nombre); recFill("r_nit", c.nit); recFill("r_ult", nitUltimo(c.nit));
-        recFill("r_rubro", c.brindaServiciosA || ""); recFill("r_idcli", c.codigoId || "");
-        recFill("r_correo", c.correo || ""); recFill("r_cel", c.telefono || "");
+        recFill("r_nombre", bdV(c, "nombre") || bdV(c, "razon")); recFill("r_nit", bdV(c, "nit")); recFill("r_ult", nitUltimo(bdV(c, "nit")));
+        recFill("r_rubro", bdV(c, "brinda")); recFill("r_idcli", bdV(c, "codigoId"));
+        recFill("r_correo", bdV(c, "correo")); recFill("r_cel", bdV(c, "celular"));
       }
     };
     const sv = el("r_serv"); if (sv) sv.onchange = () => { /* el importe lo pone el usuario */ };
@@ -1660,8 +1702,8 @@ async function registrarRecepcion() {
       fechaISO: now.toISOString(), fecha: el("r_fecha").value.trim(), hora: el("r_hora").value.trim(), dia: recDiaSemana(now),
       clienteId: el("r_idcli").value.trim(), clienteNombre: nombre, nit: el("r_nit").value.trim(), ultimoDigitoNit: el("r_ult").value.trim(),
       clienteCelular: el("r_cel").value.trim(), clienteCorreo: el("r_correo").value.trim(),
-      tipoContribuyente: recCli ? (recCli.tipoContribuyente || "") : "", rubro: el("r_rubro").value.trim(),
-      actividad: recCli ? (recCli.actividadPrincipal || "") : "", aperturaNit: recCli ? (recCli.fechaAperturaNit || "") : "", matriculaComercio: recCli ? (recCli.estadoMatricula || "") : "",
+      tipoContribuyente: recCli ? bdV(recCli, "tipo") : "", rubro: el("r_rubro").value.trim(),
+      actividad: recCli ? bdV(recCli, "actP") : "", aperturaNit: recCli ? bdV(recCli, "fechaNit") : "", matriculaComercio: recCli ? bdV(recCli, "estMat") : "",
       servicio: servicio, servicioNombre: servicio, detalleServicio: detalle,
       mesRecepcion: mesRec, anio: (mesRec.match(/\.\/(\d{2})$/) ? "20" + mesRec.match(/\.\/(\d{2})$/)[1] : ""), mesPago: el("r_mespago").value,
       importe: total, tipoPago: tipoPago, atencion: el("r_at").value, comentarios: el("r_com").value.trim(),

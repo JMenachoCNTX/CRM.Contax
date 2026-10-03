@@ -1,0 +1,37 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL  ·  Versión v11
+===============================================================
+
+CORRECCIONES / MEJORAS
+
+1) BASE DE DATOS — métricas arregladas
+   Los cuadros de arriba (Clientes activos, Por facturación, Inactivos,
+   Cerraron NIT, Suscripción inactiva, Lista negra, Ingreso mensual)
+   ya cuentan bien. El problema era que tu hoja tiene los títulos con
+   número ("20. ESTADO USUARIO") y el sistema buscaba el texto sin
+   número; ahora reconoce las columnas aunque tengan el número delante.
+
+2) RECEPCIÓN — lista de clientes desde la Base de Datos
+   El desplegable de "Cliente" ahora sale de tu Base de Datos (hoja
+   BDCONTAX), no de una lista vacía. Al elegir un cliente se autocompleta
+   NIT, último dígito, correo, celular, rubro e ID — y el correo del
+   recibo también se toma de ahí. (Necesita que el puente de la Base de
+   Datos esté conectado en Configuración.)
+
+3) ORDEN DE RECEPCIÓN — ahora en HORIZONTAL
+   El PDF que se envía por correo ahora es apaisado (landscape), ocupa
+   todo el ancho y se ve sin tener que hacer scroll.
+   >>> Para esto debes volver a publicar el PUENTE-RECIBOS.gs incluido
+       (nueva versión), con la cuenta de Gmail de CONTAX. <<<
+
+
+ARCHIVOS DE ESTE PAQUETE
+------------------------
+ - index.html         (Panel v11 — SÚBELO a GitHub)
+ - app.js             (lógica v11 — SÚBELO a GitHub)
+ - config.js          (config v11 — SÚBELO a GitHub)
+ - PUENTE-RECIBOS.gs  (Orden de Recepción horizontal — republícalo)
+ - LEEME-v11.txt
+
+Sin cambios de reglas de Firestore en esta versión.
+===============================================================

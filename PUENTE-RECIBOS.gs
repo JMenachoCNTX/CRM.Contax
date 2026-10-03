@@ -88,6 +88,7 @@ function buildOrdenHTML(d, empresaNombre) {
 
   return '' +
   '<!doctype html><html><head><meta charset="utf-8"><style>' +
+  '@page{size:A4 landscape;margin:0}' +
   '*{box-sizing:border-box;font-family:Helvetica,Arial,sans-serif;color:#1f2a3a}' +
   'body{margin:0;padding:0}' +
   '.band{background:' + navy + ';color:#fff;text-align:center;padding:26px 0 22px}' +
