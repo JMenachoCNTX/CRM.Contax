@@ -1,0 +1,58 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL  ·  Versión v9
+===============================================================
+
+NUEVO EN ESTA VERSIÓN (v9)
+--------------------------
+PESTAÑA "IMPORTAR"  (menú → Administración → Importar · solo admin)
+Sirve para traer tu historial desde Google Sheets / Excel hacia la
+base del sistema (Firebase), sin empezar de cero.
+
+CÓMO FUNCIONA (4 pasos):
+ 1) Elige el destino:
+      • Recepción (historial de pagos)
+      • Declaraciones
+      • Trámites
+      • Estados Financieros (EEFF)
+    y el "estado por defecto" (para historial ya hecho: Entregado).
+ 2) Sube el archivo .csv o .xlsx (exporta tu hoja desde Google Sheets
+    con Archivo → Descargar → CSV). La 1ª fila debe tener los títulos.
+ 3) Empareja columnas: el sistema intenta adivinar cuál es Fecha,
+    Cliente, Importe, etc.; ajústalas si hace falta. Ves una vista
+    previa de las primeras filas.
+ 4) Pulsa "Importar". Se guardan todos los registros y de inmediato
+    aparecen en Recepción, Dashboard y las listas.
+
+SEGURIDAD:
+ • La importación NO envía recibos por correo: solo guarda el historial.
+ • Cada importación queda marcada con un "lote". Si algo sale mal, el
+   botón "Deshacer esta importación" borra EXACTAMENTE esos registros
+   (no toca lo que ya tenías).
+ • Puedes importar por partes (año por año, o una lista a la vez).
+
+RECOMENDACIONES SEGÚN TU CASO:
+ • Historial de Recepción 2023→hoy: impórtalo con destino "Recepción".
+   Si en tu hoja tienes una columna que diga si era declaración o
+   trámite, conviene importar por separado eligiendo el destino
+   correcto, así se llenan también esas listas.
+ • Historial de Declaraciones (el que se desordenó): NO lo importes
+   tal cual. Primero límpialo en una copia de la hoja (que cada
+   columna vuelva a su lugar). Cuando esté ordenado, lo importas con
+   destino "Declaraciones". Si quieres, mándame esa hoja y te ayudo a
+   ordenarla antes de importar.
+ • Trámites: no tienes historial; de ahora en adelante se llena solo
+   cuando recepciones un trámite (va directo a la Lista de Trámites).
+ • EEFF: importa las listas de años anteriores con destino "Estados
+   Financieros (EEFF)".
+
+
+ARCHIVOS DE ESTE PAQUETE
+------------------------
+ - index.html   (Panel v9 — SÚBELO a GitHub)
+ - app.js       (lógica v9 — SÚBELO a GitHub)
+ - config.js    (config v9 — SÚBELO a GitHub)
+ - LEEME-v9.txt  (este archivo)
+
+Sin cambios de reglas de Firestore. La importación usa la colección
+"recepciones", que ya tiene sus reglas.
+===============================================================

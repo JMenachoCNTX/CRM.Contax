@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "8";
+const APP_VERSION = "9";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -124,6 +124,7 @@ function switchView(v, btn) {
   if (v === "respuestas") renderRespuestas();
   if (v === "reports") renderReports();
   if (v === "users") renderUsers();
+  if (v === "importar") renderImportar();
   if (v === "config") renderConfig();
 }
 
@@ -2055,6 +2056,191 @@ function arqRenderResult() {
       r.estado = "ok"; b.textContent = "✓ Conciliado"; b.classList.add("ok");
     } catch (e) { b.disabled = false; b.textContent = "Marcar conciliado"; alert("No se pudo guardar: " + (e.code || e.message)); }
   });
+}
+
+
+// ============================================================
+//  MÓDULO IMPORTAR (Administración) — historial a Firestore
+//  Lee un CSV/XLSX exportado de Google Sheets y lo guarda en
+//  la colección "recepciones" (historial, declaraciones, EEFF…).
+// ============================================================
+let IMP_ROWS = [], IMP_HEADERS = [], IMP_MAP = {}, IMP_LASTLOTE = "";
+const IMP_DESTINOS = [
+  ["", "Recepción (historial de pagos)"],
+  ["declaracion", "Declaraciones"],
+  ["tramite", "Trámites"],
+  ["eeff", "Estados Financieros (EEFF)"]
+];
+const IMP_CAMPOS = [
+  ["fecha", "Fecha"],
+  ["cliente", "Cliente (nombre)"],
+  ["celular", "Celular"],
+  ["correo", "Correo"],
+  ["servicio", "Servicio / detalle"],
+  ["importe", "Importe (Bs)"],
+  ["metodo", "Método de pago"],
+  ["estado", "Estado (opcional)"],
+  ["nota", "Nota (opcional)"]
+];
+function impEstadoNorm(v) {
+  const u = String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/entreg|termin|complet|listo|hecho|pagad|cobrad/.test(u)) return "entregado";
+  if (/proces|curso|tramit|avanz/.test(u)) return "en_proceso";
+  if (/pend|debe|falta/.test(u)) return "pendiente";
+  return "";
+}
+
+async function renderImportar() {
+  if (!isAdmin()) { el("v-importar").innerHTML = `<h1>Importar</h1><p class="lead">Esta sección es solo para administradores.</p>`; return; }
+  el("v-importar").innerHTML = `
+    <h1>Importar historial</h1>
+    <p class="lead">Trae tu historial desde Google Sheets (o Excel) hacia la base del sistema (Firebase), para no empezar de cero. Lo importado aparece en Recepción, Dashboard y las listas correspondientes.</p>
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">1) ¿Qué vas a importar?</h3>
+      <div class="grid2">
+        <div class="field"><label>Destino</label><select id="imp_destino">${IMP_DESTINOS.map(d => `<option value="${d[0]}">${d[1]}</option>`).join("")}</select></div>
+        <div class="field"><label>Estado por defecto (si una fila no trae estado)</label><select id="imp_estado"><option value="entregado">Entregado (historial ya hecho)</option><option value="pendiente">Pendiente</option><option value="en_proceso">En proceso</option></select></div>
+      </div>
+      <p class="note" style="margin:0">Consejo: exporta tu hoja desde Google Sheets con <b>Archivo → Descargar → CSV</b> (o Excel .xlsx). La primera fila debe tener los títulos de columna.</p>
+    </div>
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">2) Sube el archivo (.csv o .xlsx)</h3>
+      <input type="file" id="imp_file" accept=".csv,.xlsx,.xls">
+      <div class="msg" id="imp_msg"></div>
+    </div>
+    <div id="imp_cfg"></div>
+    <div id="imp_result"></div>`;
+  el("imp_file").onchange = impOnFile;
+}
+
+async function impOnFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const msg = el("imp_msg"); msg.className = "msg"; msg.textContent = "Leyendo archivo…";
+  try {
+    let rows;
+    if (/\.(xlsx|xls)$/i.test(file.name)) {
+      const XLSX = await arqLoadXLSX();
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" });
+    } else {
+      rows = arqParseCSV(await file.text());
+    }
+    rows = rows.filter(r => r && r.some(c => String(c).trim() !== ""));
+    if (rows.length < 2) { msg.className = "msg err"; msg.textContent = "El archivo no tiene filas suficientes."; return; }
+    IMP_HEADERS = rows[0].map(h => String(h).trim());
+    IMP_ROWS = rows.slice(1);
+    IMP_MAP = {};
+    IMP_HEADERS.forEach((h, i) => {
+      const n = h.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      if (IMP_MAP.fecha == null && /fecha|dia|date/.test(n)) IMP_MAP.fecha = i;
+      else if (IMP_MAP.cliente == null && /cliente|nombre|razon/.test(n)) IMP_MAP.cliente = i;
+      else if (IMP_MAP.celular == null && /celular|telefono|cel|whatsapp|movil/.test(n)) IMP_MAP.celular = i;
+      else if (IMP_MAP.correo == null && /correo|email|mail/.test(n)) IMP_MAP.correo = i;
+      else if (IMP_MAP.servicio == null && /servicio|detalle|concepto|descrip|tramite|declarac/.test(n)) IMP_MAP.servicio = i;
+      else if (IMP_MAP.importe == null && /importe|monto|total|precio|bs|pago|cobro/.test(n)) IMP_MAP.importe = i;
+      else if (IMP_MAP.metodo == null && /metodo|forma|pago|qr|transfer/.test(n)) IMP_MAP.metodo = i;
+      else if (IMP_MAP.estado == null && /estado|situacion|entreg/.test(n)) IMP_MAP.estado = i;
+      else if (IMP_MAP.nota == null && /nota|observ|coment|referencia/.test(n)) IMP_MAP.nota = i;
+    });
+    msg.className = "msg ok"; msg.textContent = `✓ ${IMP_ROWS.length} filas leídas. Revisa el emparejamiento de columnas abajo.`;
+    impRenderCfg();
+  } catch (err) { msg.className = "msg err"; msg.textContent = "No se pudo leer: " + (err.message || err); }
+}
+
+function impRenderCfg() {
+  const opt = sel => `<option value="-1">— ninguna —</option>` + IMP_HEADERS.map((h, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${escape(h || ("Columna " + (i + 1)))}</option>`).join("");
+  const sample = IMP_ROWS.slice(0, 5).map(r => `<tr>${IMP_HEADERS.map((h, i) => `<td>${escape(String(r[i] == null ? "" : r[i]))}</td>`).join("")}</tr>`).join("");
+  el("imp_cfg").innerHTML = `
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">3) Empareja las columnas</h3>
+      <p class="note" style="margin:0 0 10px">Dile al sistema qué columna de tu archivo corresponde a cada dato. Lo que no tengas, déjalo en "ninguna".</p>
+      <div class="grid3">
+        ${IMP_CAMPOS.map(c => `<div class="field"><label>${c[1]}</label><select data-imp="${c[0]}">${opt(IMP_MAP[c[0]] == null ? -1 : IMP_MAP[c[0]])}</select></div>`).join("")}
+      </div>
+      <div style="overflow:auto;margin:6px 0 12px"><table style="font-size:11.5px"><thead><tr>${IMP_HEADERS.map(h => `<th>${escape(h)}</th>`).join("")}</tr></thead><tbody>${sample}</tbody></table></div>
+      <p class="note" style="margin:0 0 10px">Vista previa de las primeras filas. La importación <b>no</b> envía recibos por correo; solo guarda el historial.</p>
+      <button class="btn" id="imp_run">Importar ${IMP_ROWS.length} filas</button>
+      <div class="msg" id="imp_runmsg"></div>
+    </div>`;
+  el("imp_cfg").querySelectorAll("[data-imp]").forEach(s => s.onchange = () => { IMP_MAP[s.dataset.imp] = Number(s.value); });
+  el("imp_run").onclick = impRun;
+}
+
+async function impRun() {
+  const msg = el("imp_runmsg");
+  if (IMP_MAP.cliente == null || IMP_MAP.cliente < 0) { msg.className = "msg err"; msg.textContent = "Al menos empareja la columna de Cliente."; return; }
+  const tipo = el("imp_destino").value;
+  const estadoDef = el("imp_estado").value;
+  const lote = "imp-" + Date.now();
+  const get = (r, k) => (IMP_MAP[k] != null && IMP_MAP[k] >= 0) ? String(r[IMP_MAP[k]] == null ? "" : r[IMP_MAP[k]]).trim() : "";
+  // Construir documentos
+  const docs = [];
+  IMP_ROWS.forEach(r => {
+    const nombre = get(r, "cliente");
+    const impTxt = get(r, "importe");
+    if (!nombre && !impTxt) return; // fila vacía
+    const estRaw = get(r, "estado");
+    const estado = impEstadoNorm(estRaw) || estadoDef;
+    docs.push({
+      fechaISO: arqDate(get(r, "fecha")) || "",
+      clienteNombre: nombre,
+      clienteCelular: get(r, "celular"),
+      clienteCorreo: get(r, "correo"),
+      servicioNombre: get(r, "servicio"),
+      categoria: "",
+      tipo: tipo,
+      importe: arqNum(impTxt) || 0,
+      metodoPago: get(r, "metodo"),
+      nota: get(r, "nota"),
+      estado: estado,
+      reciboNro: "",
+      reciboEnviado: false,
+      origen: "importado",
+      importLote: lote,
+      createdAt: serverTimestamp()
+    });
+  });
+  if (!docs.length) { msg.className = "msg err"; msg.textContent = "No hay filas válidas para importar."; return; }
+  const btn = el("imp_run"); btn.disabled = true;
+  msg.className = "msg"; let done = 0;
+  try {
+    const CH = 20;
+    for (let i = 0; i < docs.length; i += CH) {
+      const chunk = docs.slice(i, i + CH);
+      await Promise.all(chunk.map(d => setDoc(doc(collection(db, "recepciones")), d)));
+      done += chunk.length;
+      msg.textContent = `Importando… ${done}/${docs.length}`;
+    }
+    IMP_LASTLOTE = lote; recepLoaded = false;
+    msg.className = "msg ok"; msg.textContent = `✓ ${done} registros importados correctamente.`;
+    el("imp_result").innerHTML = `<div class="formcard">
+      <h3 style="margin:0 0 6px">Importación lista ✓</h3>
+      <p class="note" style="margin:0 0 10px">Se importaron <b>${done}</b> registros al destino elegido. Ya aparecen en Recepción, Dashboard y las listas.
+      Si algo salió mal, puedes deshacer SOLO esta importación (borra exactamente esos ${done} registros).</p>
+      <button class="btn danger" id="imp_undo" style="background:var(--danger);border-color:var(--danger)">Deshacer esta importación</button>
+      <div class="msg" id="imp_undomsg"></div>
+    </div>`;
+    el("imp_undo").onclick = () => impUndo(lote, done);
+  } catch (e) { msg.className = "msg err"; msg.textContent = "Error al importar: " + (e.code || e.message) + ` (se guardaron ${done}).`; }
+  btn.disabled = false;
+}
+
+async function impUndo(lote, n) {
+  const msg = el("imp_undomsg"); msg.className = "msg"; msg.textContent = "Deshaciendo…";
+  try {
+    const snap = await getDocs(collection(db, "recepciones"));
+    const ids = snap.docs.filter(d => (d.data() || {}).importLote === lote).map(d => d.id);
+    let done = 0;
+    const CH = 20;
+    for (let i = 0; i < ids.length; i += CH) {
+      await Promise.all(ids.slice(i, i + CH).map(id => deleteDoc(doc(db, "recepciones", id))));
+      done += Math.min(CH, ids.length - i);
+      msg.textContent = `Deshaciendo… ${done}/${ids.length}`;
+    }
+    recepLoaded = false;
+    msg.className = "msg ok"; msg.textContent = `✓ Importación deshecha (${done} registros eliminados).`;
+    el("imp_undo").disabled = true;
+  } catch (e) { msg.className = "msg err"; msg.textContent = "No se pudo deshacer: " + (e.code || e.message); }
 }
 
 
