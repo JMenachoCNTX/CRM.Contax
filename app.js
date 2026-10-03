@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "9";
+const APP_VERSION = "10";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -118,6 +118,7 @@ function switchView(v, btn) {
   if (v === "eeff") renderLista("eeff", "v-eeff", "Estados Financieros (EEFF)");
   if (v === "calendario") renderCalendario();
   if (v === "arqueo") renderArqueo();
+  if (v === "egresos") renderEgresos();
   if (v === "presence") renderPresence();
   if (v === "historial") renderHistorial();
   if (v === "bandeja") renderBandeja();
@@ -607,6 +608,32 @@ async function renderConfig() {
       <div class="msg" id="c_recibosmsg"></div>
     </div>
     <div class="formcard">
+      <h3 style="margin:0 0 6px">Recepción — Numeración automática</h3>
+      <p class="note" style="margin:0 0 12px">Define desde qué número siguen el <b>N° de Recepción</b>y el <b>N° de Comprobante/Recibo</b>, y el <b>N° de Gasto</b>(Egresos). El sistema usa el número y sube +1 solo en cada registro.</p>
+      <div class="grid3">
+        <div class="field"><label>Próximo N° Recepción</label><input id="c_nrec" type="number" value="${escape(String(cfg.nextRecep != null ? cfg.nextRecep : 7048))}"></div>
+        <div class="field"><label>Próximo N° Comprobante</label><input id="c_ncom" type="number" value="${escape(String(cfg.nextRecibo != null ? cfg.nextRecibo : 7784))}"></div>
+        <div class="field"><label>Próximo N° Gasto (Egresos)</label><input id="c_ngas" type="number" value="${escape(String(cfg.nextGasto != null ? cfg.nextGasto : 1002))}"></div>
+      </div>
+      <button class="btn" id="c_numsave">Guardar numeración</button>
+      <div class="msg" id="c_nummsg"></div>
+    </div>
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">Recepción — Listas desplegables</h3>
+      <p class="note" style="margin:0 0 12px">Un valor por línea. Estas listas aparecen en Recepción y Egresos. Si dejas una vacía, se usan los valores por defecto.</p>
+      <div class="grid2">
+        <div class="field"><label>Servicios (SERVICIOS CONTAX)</label><textarea id="c_l_servicios" style="min-height:120px">${escape((recListas(cfg).servicios).join("\n"))}</textarea></div>
+        <div class="field"><label>Detalle de servicio (Tipo)</label><textarea id="c_l_detalles" style="min-height:120px">${escape((recListas(cfg).detalles).join("\n"))}</textarea></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Formas de pago</label><textarea id="c_l_pagos" style="min-height:90px">${escape((recListas(cfg).pagos).join("\n"))}</textarea></div>
+        <div class="field"><label>Atención (personas)</label><textarea id="c_l_atencion" style="min-height:90px">${escape((recListas(cfg).atencion).join("\n"))}</textarea></div>
+        <div class="field"><label>Cuentas contables (Egresos)</label><textarea id="c_l_cuentas" style="min-height:90px">${escape((recListas(cfg).cuentas).join("\n"))}</textarea></div>
+      </div>
+      <button class="btn" id="c_listsave">Guardar listas</button>
+      <div class="msg" id="c_listmsg"></div>
+    </div>
+    <div class="formcard">
       <h3 style="margin:0 0 6px">Conocimiento de la empresa (para la IA)</h3>
       <p class="note" style="margin:0 0 12px">Escribe aquí todo lo que la IA debe saber de tu empresa: qué es CONTAX, servicios y precios,
       formas de pago, horarios, procedimientos, tono de respuesta, datos de contacto, preguntas frecuentes, etc.
@@ -656,6 +683,18 @@ Contacto: …">${escape(cfg.aiContext || "")}</textarea>
   el("c_recibossave").onclick = async () => {
     const msg = el("c_recibosmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
     try { await setDoc(doc(db, "config", "app"), { recibosUrl: el("c_recibos").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada. La pestaña Recepción ya puede enviar recibos."; }
+    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_numsave").onclick = async () => {
+    const msg = el("c_nummsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    try { await setDoc(doc(db, "config", "app"), { nextRecep: parseInt(el("c_nrec").value, 10) || 1, nextRecibo: parseInt(el("c_ncom").value, 10) || 1, nextGasto: parseInt(el("c_ngas").value, 10) || 1, updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Numeración guardada."; }
+    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_listsave").onclick = async () => {
+    const msg = el("c_listmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    const toArr = id => el(id).value.split("\n").map(s => s.trim()).filter(Boolean);
+    const recListasVal = { servicios: toArr("c_l_servicios"), detalles: toArr("c_l_detalles"), pagos: toArr("c_l_pagos"), atencion: toArr("c_l_atencion"), cuentas: toArr("c_l_cuentas") };
+    try { await setDoc(doc(db, "config", "app"), { recListas: recListasVal, updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Listas guardadas. Ya aparecen en Recepción y Egresos."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
   el("c_ctxsave").onclick = async () => {
@@ -1440,127 +1479,335 @@ function money(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { mi
 function fmtFecha(iso) { if (!iso) return ""; try { return new Date(iso).toLocaleString("es-BO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return iso; } }
 function mesKey(iso) { return (iso || "").slice(0, 7); }
 async function recibosUrlGet() { const cfg = await loadConfigDoc(); return (cfg.recibosUrl || "").trim(); }
+// ===== Listas configurables de Recepción (con valores semilla) =====
+const REC_SEED = {
+  servicios: ["DECLARACIÓN MENSUAL", "TRÁMITES", "BALANCE", "DECLARACIÓN MENSUAL 2024", "FACTURACIÓN YANGO", "SERVICIOS MTG - YANGO", "Servicios de Emisión de Facturas, Verificaciones de Documentos"],
+  detalles: ["DDJJ - Sin Movimiento", "DDJJ - Con Su Crédito Fiscal Anterior", "DDJJ - Facturas ELECTRÓNICAS", "DDJJ - Facturas MANUALES", "DDJJ - Facturas MIXTAS (Electrónicas y Manuales)", "FORM 110 - RC IVA (Dependientes)", "TRÁMITES RIDERS (Matrícula - ROE)", "TRÁMITE MATRÍCULA (APERTURA)", "TRÁMITE MATRÍCULA (CIERRE)", "TRÁMITE ROE", "TRÁMITE ACTUALIZACION DE ACTIVIDADES ECONOMICAS", "TRÁMITE ACTUALIZACIÓN SEPREC", "BALANCE DE APERTURA", "BALANCE GENERAL", "BALANCE DE CIERRE", "INICIO DE SERVICIOS CONTABLES"],
+  pagos: ["EFECTIVO", "TRANSFERENCIA", "DEUDOR"],
+  atencion: ["AILYN", "SOLEDAD", "JHONNY", "KEVIN"],
+  cuentas: ["ALQUILER", "AGUA", "LUZ", "INTERNET", "SUELDOS", "LINEA CORPORATIVA", "IMPUESTOS", "INTERESES"]
+};
+const REC_MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+function recMesesOpts() {
+  const out = []; const y2 = new Date().getFullYear() + 1;
+  for (let y = y2; y >= 2023; y--) { const yy = String(y).slice(2); REC_MESES.forEach(m => out.push(m + "./" + yy)); }
+  return out;
+}
+function recListas(cfg) {
+  const L = (cfg && cfg.recListas) || {};
+  const pick = (k) => (Array.isArray(L[k]) && L[k].length) ? L[k] : REC_SEED[k];
+  return { servicios: pick("servicios"), detalles: pick("detalles"), pagos: pick("pagos"), atencion: pick("atencion"), cuentas: pick("cuentas") };
+}
+// Numeración automática continua (lee config, usa el número y guarda el siguiente)
+async function recNextNum(field, fallback) {
+  const cfg = await loadConfigDoc();
+  let n = parseInt(cfg[field], 10); if (!Number.isFinite(n)) n = fallback;
+  try { await setDoc(doc(db, "config", "app"), { [field]: n + 1, updatedAt: serverTimestamp() }, { merge: true }); } catch (e) {}
+  return n;
+}
+// Clasifica el servicio/detalle en la lista de trabajo (declaración / trámite / EEFF)
+function recTipoDe(servicio, detalle) {
+  const s = ((servicio || "") + " " + (detalle || "")).toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/BALANCE|EEFF|ESTADO FINANC|SERVICIOS CONTABLES/.test(s)) return "eeff";
+  if (/TRAMITE|MATRICULA|ROE|SEPREC|ACTUALIZ/.test(s)) return "tramite";
+  if (/DDJJ|DECLARAC|FORM 110|RC IVA/.test(s)) return "declaracion";
+  return "";
+}
+function nitUltimo(nit) { const d = String(nit || "").replace(/\D/g, ""); return d ? d.slice(-3) : ""; }
+function recDiaSemana(d) { try { return d.toLocaleDateString("es-BO", { weekday: "long" }); } catch (e) { return ""; } }
+
 async function postRecibo(rec) {
   const url = await recibosUrlGet(); if (!url) return false;
   const cfg = await loadConfigDoc();
-  const payload = { action: "recibo", to: rec.clienteCorreo, nombre: rec.clienteNombre, servicio: rec.servicioNombre, detalle: rec.detalle || "", nota: rec.nota || "", importe: rec.importe, metodo: rec.metodoPago || "", fecha: fmtFecha(rec.fechaISO), reciboNro: rec.reciboNro, empresa: (cfg.company || "CONTAX") };
+  const payload = {
+    action: "recibo", to: rec.clienteCorreo, nombre: rec.clienteNombre, nit: rec.nit || "", idCliente: rec.clienteId || "",
+    celular: rec.clienteCelular || "", correo: rec.clienteCorreo || "", tipoContribuyente: rec.tipoContribuyente || "",
+    rubro: rec.rubro || "", actividad: rec.actividad || "", aperturaNit: rec.aperturaNit || "", matricula: rec.matriculaComercio || "",
+    nroRecepcion: rec.nroRecepcion || "", nroRecibo: rec.nroComprobante || "", dia: rec.dia || "", fecha: rec.fecha || "", hora: rec.hora || "",
+    mes: rec.mesRecepcion || "", tipoServicio: rec.servicio || "", detalleServicio: rec.detalleServicio || "",
+    importe: rec.importe, formaPago: rec.tipoPago || "", atencion: rec.atencion || "", comentarios: rec.comentarios || "",
+    empresa: (cfg.company || "CONTAX")
+  };
   try { await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) }); return true; }
   catch (e) { return false; }
 }
 
-// ---------- RECEPCIÓN ----------
+// ---------- RECEPCIÓN (completa) ----------
+let recCli = null; // cliente seleccionado para autollenado
 async function renderRecepcion() {
   el("v-recepcion").innerHTML = `<h1>Recepción</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
-  await tarLoad(); await recepLoad();
+  await loadClientes(); await recepLoad();
   paintRecepcion();
 }
+function recFill(id, v) { const e = el(id); if (e) e.value = v == null ? "" : v; }
 function paintRecepcion() {
   const canEdit = canEditClientes();
-  const serv = TARIFAS.filter(t => t.activo !== false);
-  const servOpts = serv.map(t => `<option value="${t.id}">${escape(t.nombre)}${t.precio != null && t.precio !== "" ? ` — ${money(t.precio)}` : ''}</option>`).join("");
-  const metodos = ["QR", "Transferencia", "Efectivo", "Tarjeta", "Otro"];
-  const meses = [...new Set(RECEP.map(r => mesKey(r.fechaISO)).filter(Boolean))].sort().reverse();
-  if (!recFilterMes && meses.length) recFilterMes = meses[0];
-  const list = RECEP.filter(r => !recFilterMes || mesKey(r.fechaISO) === recFilterMes);
-  const total = list.reduce((s, r) => s + (Number(r.importe) || 0), 0);
-  const rows = list.map(r => `<tr>
-     <td class="mono">${escape(fmtFecha(r.fechaISO))}</td>
-     <td><b>${escape(r.clienteNombre || "—")}</b>${r.clienteCelular ? `<div style="color:var(--muted);font-size:12px">${escape(r.clienteCelular)}</div>` : ''}</td>
-     <td>${escape(r.servicioNombre || "—")}</td>
-     <td>${escape(r.metodoPago || "—")}</td>
-     <td class="mono" style="text-align:right">${money(r.importe)}</td>
-     <td style="text-align:center">${r.reciboEnviado ? '<span class="badge ok">enviado</span>' : '<span class="badge off">—</span>'}</td>
-     <td style="text-align:right;white-space:nowrap">${canEdit ? `<button class="mini" data-recibo="${r.id}">Recibo</button>${isAdmin() ? ` <button class="mini" data-delr="${r.id}">✕</button>` : ''}` : ''}</td></tr>`).join("");
-  el("v-recepcion").innerHTML = `<h1>Recepción</h1>
-    <p class="lead">Registra los pagos de los clientes. Cada registro alimenta el Dashboard y las listas de trabajo, y puede enviar un recibo en PDF al correo del cliente.</p>
-    ${canEdit ? `<div class="formcard" style="max-width:760px">
-      <h3 style="margin:0 0 12px">Registrar un pago</h3>
-      <div class="grid2">
-        <div class="field"><label>Cliente (nombre)</label><input id="r_nombre" placeholder="Nombre o razón social"></div>
-        <div class="field"><label>Celular</label><input id="r_cel" placeholder="Ej. 7xxxxxxx"></div>
+  loadConfigDoc().then(cfg => {
+    const L = recListas(cfg);
+    const nextRec = parseInt(cfg.nextRecep, 10) || 7048;
+    const nextCom = parseInt(cfg.nextRecibo, 10) || 7784;
+    const mesesOpts = recMesesOpts();
+    const cliOpts = CLIENTES.map(c => `<option value="${c.id}">${escape((c.codigoId ? c.codigoId + " · " : "") + (c.nombre || ""))}</option>`).join("");
+    const meses = [...new Set(RECEP.map(r => (r.mesRecepcion || mesKey(r.fechaISO))).filter(Boolean))];
+    const now = new Date();
+    const list = RECEP.slice();
+    const total = list.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const rows = list.map(r => `<tr data-rec="${r.id}">
+       <td class="mono">${escape(r.fecha || fmtFecha(r.fechaISO))}${r.hora ? `<div style="color:var(--muted);font-size:11px">${escape(r.hora)}</div>` : ''}</td>
+       <td class="mono">${escape(String(r.nroRecepcion || "—"))}</td>
+       <td class="mono">${escape(String(r.nroComprobante || "—"))}</td>
+       <td><b>${escape(r.clienteNombre || "—")}</b>${r.nit ? `<div style="color:var(--muted);font-size:11px">NIT ${escape(r.nit)}</div>` : ''}</td>
+       <td>${escape(r.servicio || r.servicioNombre || "—")}${r.detalleServicio ? `<div style="color:var(--muted);font-size:11px">${escape(r.detalleServicio)}</div>` : ''}</td>
+       <td>${escape(r.mesRecepcion || "—")}</td>
+       <td class="mono" style="text-align:right">${money(r.importe)}</td>
+       <td>${escape(r.tipoPago || "—")}</td>
+       <td>${escape(r.atencion || "—")}</td>
+       <td style="text-align:center">${(r.tipoPago === "DEUDOR" || r.estadoDeuda === "con_deuda") ? '<span class="badge danger">Con deuda</span>' : '<span class="badge ok">Sin deuda</span>'}</td>
+       <td style="text-align:right;white-space:nowrap"><button class="mini" data-ver="${r.id}">Ver</button>${canEdit ? ` <button class="mini" data-recibo="${r.id}">Recibo</button>` : ''}${isAdmin() ? ` <button class="mini" data-delr="${r.id}">✕</button>` : ''}</td></tr>`).join("");
+    el("v-recepcion").innerHTML = `<h1>Recepción</h1>
+      <p class="lead">Registra una recepción con todos sus datos. Alimenta el Dashboard, las listas de trabajo y envía la Orden de Recepción en PDF al cliente.</p>
+      ${canEdit ? `<div class="formcard">
+        <h3 style="margin:0 0 10px">Nueva recepción</h3>
+        <div class="fs">Datos automáticos</div>
+        <div class="grid3">
+          <div class="field"><label>N° Recepción</label><input id="r_nrorec" value="${nextRec}"></div>
+          <div class="field"><label>N° Comprobante (Recibo)</label><input id="r_nrocom" value="${nextCom}"></div>
+          <div class="field"><label>Fecha</label><input id="r_fecha" value="${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}"></div>
+          <div class="field"><label>Hora</label><input id="r_hora" value="${now.toLocaleTimeString("es-BO", { hour12: false })}"></div>
+          <div class="field"><label>NIT</label><input id="r_nit" placeholder="—"></div>
+          <div class="field"><label>Último dígito NIT</label><input id="r_ult" placeholder="—"></div>
+          <div class="field"><label>Presta servicios a (Rubro)</label><input id="r_rubro" placeholder="—"></div>
+          <div class="field"><label>ID Cliente</label><input id="r_idcli" placeholder="—"></div>
+        </div>
+        <div class="fs" style="margin-top:12px">Llenar datos</div>
+        <div class="grid2">
+          <div class="field"><label>Cliente</label><select id="r_cli"><option value="">— elegir cliente —</option>${cliOpts}</select></div>
+          <div class="field"><label>Nombre / Razón Social</label><input id="r_nombre" placeholder="Nombre completo del cliente"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Correo (para el recibo)</label><input id="r_correo" type="email" placeholder="cliente@correo.com"></div>
+          <div class="field"><label>Celular</label><input id="r_cel" placeholder="7xxxxxxx"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Servicio (SERVICIOS CONTAX)</label><select id="r_serv"><option value="">— elegir —</option>${L.servicios.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+          <div class="field"><label>Detalle de servicio (Tipo)</label><select id="r_det"><option value="">— elegir —</option>${L.detalles.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Mes a recepcionar</label><select id="r_mesrec"><option value="">—</option>${mesesOpts.map(m => `<option>${escape(m)}</option>`).join("")}</select></div>
+          <div class="field"><label>Mes de pago</label><select id="r_mespago"><option value="">—</option>${mesesOpts.map(m => `<option>${escape(m)}</option>`).join("")}</select></div>
+          <div class="field"><label>Total (Bs)</label><input id="r_total" type="number" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Forma de pago</label><select id="r_pago">${L.pagos.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+          <div class="field"><label>Atención (quién atiende)</label><select id="r_at"><option value="">—</option>${L.atencion.map(s => `<option ${ME && (ME.name || "").toUpperCase().indexOf(s) === 0 ? "selected" : ""}>${escape(s)}</option>`).join("")}</select></div>
+          <div class="field"><label>Comentarios (ej. fecha de pago)</label><input id="r_com" placeholder="—"></div>
+        </div>
+        <div class="field"><label><input type="checkbox" id="r_enviar" checked style="width:auto;margin-right:6px">Enviar la Orden de Recepción (PDF) al correo del cliente</label></div>
+        <button class="btn" id="r_save">Registrar recepción</button>
+        <div class="msg" id="r_msg"></div>
+      </div>` : '<div class="note">Tu rol puede ver la recepción pero no registrar.</div>'}
+      <div class="kpis" style="margin-top:10px">
+        <div class="kpi"><div class="n">${list.length}</div><div class="l">Recepciones</div></div>
+        <div class="kpi"><div class="n">${money(total)}</div><div class="l">Total registrado</div></div>
+        <div class="kpi"><div class="n" style="color:var(--danger)">${list.filter(r => r.tipoPago === "DEUDOR" || r.estadoDeuda === "con_deuda").length}</div><div class="l">Con deuda</div></div>
       </div>
-      <div class="grid2">
-        <div class="field"><label>Correo (para el recibo)</label><input id="r_correo" type="email" placeholder="cliente@correo.com"></div>
-        <div class="field"><label>Método de pago</label><select id="r_metodo">${metodos.map(m => `<option>${m}</option>`).join("")}</select></div>
+      <div class="toolbar">
+        <input id="r_buscar" class="mini" style="padding:9px;min-width:220px" placeholder="🔎 Buscar en recepciones…">
+        <button class="btn sec" id="r_export" style="border:1px solid var(--line)" title="Descargar respaldo CSV">⬇ Exportar</button>
       </div>
-      <div class="grid2">
-        <div class="field"><label>Servicio</label><select id="r_serv"><option value="">— elegir servicio —</option>${servOpts}</select></div>
-        <div class="field"><label>Importe (Bs)</label><input id="r_importe" type="number" step="0.01" placeholder="0.00"></div>
-      </div>
-      <div class="field"><label>Nota / detalle adicional (opcional)</label><input id="r_nota" placeholder="Ej. mes de octubre, incluye…"></div>
-      <div class="field"><label><input type="checkbox" id="r_enviar" checked style="width:auto;margin-right:6px">Enviar recibo en PDF al correo del cliente</label></div>
-      <button class="btn" id="r_save">Registrar pago</button>
-      <div class="msg" id="r_msg"></div>
-    </div>` : '<div class="note">Tu rol puede ver la recepción pero no registrar pagos.</div>'}
-    <div class="kpis" style="margin-top:10px">
-      <div class="kpi"><div class="n">${list.length}</div><div class="l">Pagos del período</div></div>
-      <div class="kpi"><div class="n">${money(total)}</div><div class="l">Ingresos del período</div></div>
-    </div>
-    <div class="toolbar">
-      <span class="note" style="align-self:center">Mes:</span>
-      <select id="r_mes" class="mini" style="padding:9px">${meses.map(m => `<option value="${m}" ${m === recFilterMes ? 'selected' : ''}>${m}</option>`).join("") || '<option value="">—</option>'}</select>
-      <button class="btn sec" id="r_export" style="border:1px solid var(--line)" title="Descargar respaldo en CSV">⬇ Exportar</button>
-    </div>
-    <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Servicio</th><th>Método</th><th style="text-align:right">Importe</th><th>Recibo</th><th></th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted)">Sin pagos en este período.</td></tr>`}</tbody></table>`;
-  const sv = el("r_serv");
-  if (sv) sv.onchange = () => { const t = TARIFAS.find(x => x.id === sv.value); if (t && t.precio != null && t.precio !== "") el("r_importe").value = t.precio; };
-  if (el("r_mes")) el("r_mes").onchange = () => { recFilterMes = el("r_mes").value; paintRecepcion(); };
-  if (el("r_export")) el("r_export").onclick = () => {
-    const H = ["Fecha", "Cliente", "Celular", "Correo", "Servicio", "Categoría", "Tipo", "Método", "Importe (Bs)", "Estado", "Recibo Nro", "Recibo enviado", "Nota", "Registrado por"];
-    const rws = RECEP.map(r => [fmtFecha(r.fechaISO), r.clienteNombre || "", r.clienteCelular || "", r.clienteCorreo || "", r.servicioNombre || "", r.categoria || "", r.tipo || "", r.metodoPago || "", (Number(r.importe) || 0), r.estado || "", r.reciboNro || "", (r.reciboEnviado ? "Sí" : "No"), r.nota || "", r.registradoPorNombre || ""]);
-    downloadCSV("CONTAX-Recepcion-" + hoyISO() + ".csv", H, rws);
-  };
-  if (el("r_save")) el("r_save").onclick = registrarPago;
-  el("v-recepcion").querySelectorAll("[data-recibo]").forEach(b => b.onclick = () => enviarReciboDe(RECEP.find(x => x.id === b.dataset.recibo)));
-  el("v-recepcion").querySelectorAll("[data-delr]").forEach(b => b.onclick = () => delRecepcion(RECEP.find(x => x.id === b.dataset.delr)));
-  if (recFlash && el("r_msg")) { el("r_msg").className = "msg ok"; el("r_msg").textContent = recFlash; recFlash = ""; }
+      <div class="bd-scroll"><table class="bd-table"><thead><tr><th>Fecha</th><th>N° Rec</th><th>N° Comp</th><th>Cliente</th><th>Servicio</th><th>Mes</th><th style="text-align:right">Total</th><th>Pago</th><th>Atención</th><th>Deuda</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="11" style="color:var(--muted)">Sin recepciones todavía.</td></tr>`}</tbody></table></div>`;
+    // Autollenado al elegir cliente
+    const selCli = el("r_cli");
+    if (selCli) selCli.onchange = () => {
+      const c = CLIENTES.find(x => x.id === selCli.value); recCli = c || null;
+      if (c) {
+        recFill("r_nombre", c.nombre); recFill("r_nit", c.nit); recFill("r_ult", nitUltimo(c.nit));
+        recFill("r_rubro", c.brindaServiciosA || ""); recFill("r_idcli", c.codigoId || "");
+        recFill("r_correo", c.correo || ""); recFill("r_cel", c.telefono || "");
+      }
+    };
+    const sv = el("r_serv"); if (sv) sv.onchange = () => { /* el importe lo pone el usuario */ };
+    if (el("r_save")) el("r_save").onclick = registrarRecepcion;
+    if (el("r_buscar")) el("r_buscar").oninput = () => {
+      const t = el("r_buscar").value.toLowerCase();
+      el("v-recepcion").querySelectorAll("tbody tr[data-rec]").forEach(tr => { tr.style.display = tr.textContent.toLowerCase().includes(t) ? "" : "none"; });
+    };
+    if (el("r_export")) el("r_export").onclick = recExport;
+    el("v-recepcion").querySelectorAll("[data-ver]").forEach(b => b.onclick = () => openRecepDetalle(RECEP.find(x => x.id === b.dataset.ver)));
+    el("v-recepcion").querySelectorAll("[data-recibo]").forEach(b => b.onclick = () => enviarReciboDe(RECEP.find(x => x.id === b.dataset.recibo)));
+    el("v-recepcion").querySelectorAll("[data-delr]").forEach(b => b.onclick = () => delRecepcion(RECEP.find(x => x.id === b.dataset.delr)));
+    if (recFlash && el("r_msg")) { el("r_msg").className = "msg ok"; el("r_msg").textContent = recFlash; recFlash = ""; }
+  });
 }
-async function registrarPago() {
+async function registrarRecepcion() {
   const msg = el("r_msg");
   const nombre = el("r_nombre").value.trim();
-  const servId = el("r_serv").value;
-  const importe = parseFloat(el("r_importe").value);
-  if (!nombre) { msg.className = "msg err"; msg.textContent = "Pon el nombre del cliente."; return; }
-  if (isNaN(importe) || importe < 0) { msg.className = "msg err"; msg.textContent = "Pon un importe válido."; return; }
-  const t = TARIFAS.find(x => x.id === servId);
-  const now = new Date();
-  const reciboNro = "CTX-" + now.toISOString().slice(2, 10).replace(/-/g, "") + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
-  const servNombre = t ? t.nombre : (el("r_serv").selectedOptions[0] ? el("r_serv").selectedOptions[0].text.replace(/ — .*$/, "") : "");
-  const rec = {
-    fechaISO: now.toISOString(),
-    clienteNombre: nombre, clienteCelular: el("r_cel").value.trim(), clienteCorreo: el("r_correo").value.trim(),
-    servicioId: servId || "", servicioNombre: servNombre, categoria: t ? (t.categoria || "") : "", tipo: t ? (t.tipo || "") : "", detalle: t ? (t.descripcion || "") : "",
-    importe, metodoPago: el("r_metodo").value, nota: el("r_nota").value.trim(),
-    estado: "pendiente", reciboNro, reciboEnviado: false,
-    registradoPorUid: (ME && ME.uid) || "", registradoPorNombre: (ME && (ME.name || ME.email)) || "", createdAt: serverTimestamp()
-  };
+  const total = parseFloat(el("r_total").value);
+  const servicio = el("r_serv").value;
+  if (!nombre) { msg.className = "msg err"; msg.textContent = "Elige o escribe el cliente."; return; }
+  if (isNaN(total) || total < 0) { msg.className = "msg err"; msg.textContent = "Pon un total válido."; return; }
   const btn = el("r_save"); btn.disabled = true; btn.textContent = "Registrando…";
-  const quiereRecibo = el("r_enviar").checked;
   try {
-    const ref = doc(collection(db, "recepciones"));
-    await setDoc(ref, rec); rec.id = ref.id;
+    const nroRec = await recNextNum("nextRecep", 7048);
+    const nroCom = await recNextNum("nextRecibo", 7784);
+    const now = new Date();
+    const detalle = el("r_det").value;
+    const mesRec = el("r_mesrec").value;
+    const tipoPago = el("r_pago").value;
+    const rec = {
+      nroRecepcion: nroRec, nroComprobante: nroCom,
+      fechaISO: now.toISOString(), fecha: el("r_fecha").value.trim(), hora: el("r_hora").value.trim(), dia: recDiaSemana(now),
+      clienteId: el("r_idcli").value.trim(), clienteNombre: nombre, nit: el("r_nit").value.trim(), ultimoDigitoNit: el("r_ult").value.trim(),
+      clienteCelular: el("r_cel").value.trim(), clienteCorreo: el("r_correo").value.trim(),
+      tipoContribuyente: recCli ? (recCli.tipoContribuyente || "") : "", rubro: el("r_rubro").value.trim(),
+      actividad: recCli ? (recCli.actividadPrincipal || "") : "", aperturaNit: recCli ? (recCli.fechaAperturaNit || "") : "", matriculaComercio: recCli ? (recCli.estadoMatricula || "") : "",
+      servicio: servicio, servicioNombre: servicio, detalleServicio: detalle,
+      mesRecepcion: mesRec, anio: (mesRec.match(/\.\/(\d{2})$/) ? "20" + mesRec.match(/\.\/(\d{2})$/)[1] : ""), mesPago: el("r_mespago").value,
+      importe: total, tipoPago: tipoPago, atencion: el("r_at").value, comentarios: el("r_com").value.trim(),
+      tipo: recTipoDe(servicio, detalle), estado: "pendiente", estadoDeuda: (tipoPago === "DEUDOR" ? "con_deuda" : "sin_deuda"),
+      reciboNro: String(nroCom), reciboEnviado: false,
+      registradoPorUid: (ME && ME.uid) || "", registradoPorNombre: (ME && (ME.name || ME.email)) || "", createdAt: serverTimestamp()
+    };
+    const ref = doc(collection(db, "recepciones")); await setDoc(ref, rec); rec.id = ref.id;
     let enviado = false;
-    if (quiereRecibo && rec.clienteCorreo) {
+    if (el("r_enviar").checked && rec.clienteCorreo) {
       enviado = await postRecibo(rec);
       if (enviado) { try { await setDoc(doc(db, "recepciones", ref.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} }
     }
-    recFlash = "✓ Pago registrado" + (quiereRecibo ? (rec.clienteCorreo ? (enviado ? " y recibo enviado al correo." : " (no se pudo enviar el recibo; revisa la URL de recibos en Configuración).") : " (sin correo: no se envió recibo).") : ".");
-    await recepLoad();
-    paintRecepcion();
-  } catch (e) { btn.disabled = false; btn.textContent = "Registrar pago"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+    recFlash = `✓ Recepción N° ${nroRec} registrada` + (el("r_enviar").checked ? (rec.clienteCorreo ? (enviado ? " y Orden enviada al correo." : " (no se pudo enviar el PDF; revisa la URL de recibos).") : " (sin correo: no se envió PDF).") : ".");
+    recCli = null; await recepLoad(); paintRecepcion();
+  } catch (e) { btn.disabled = false; btn.textContent = "Registrar recepción"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+}
+function openRecepDetalle(r) {
+  if (!r) return;
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const row = (l, v) => `<div style="display:flex;gap:10px;padding:3px 0;font-size:13px"><span style="color:var(--muted);flex:0 0 160px">${l}</span><span style="flex:1">${escape(v || "—")}</span></div>`;
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:620px;max-width:96vw;max-height:92vh;overflow:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="margin:0">Recepción N° ${escape(String(r.nroRecepcion || "—"))}</h3><button class="mini" id="rd_x">✕</button></div>
+    <div class="fs">Datos de recepción</div>
+    ${row("N° Recepción", String(r.nroRecepcion || ""))}${row("N° Comprobante", String(r.nroComprobante || ""))}${row("Día / Fecha / Hora", [r.dia, r.fecha, r.hora].filter(Boolean).join(" · "))}
+    <div class="fs" style="margin-top:8px">Cliente</div>
+    ${row("Nombre / Razón Social", r.clienteNombre)}${row("NIT", r.nit)}${row("ID Cliente", r.clienteId)}${row("Celular", r.clienteCelular)}${row("Correo", r.clienteCorreo)}${row("Tipo contribuyente", r.tipoContribuyente)}${row("Rubro / Presta servicios a", r.rubro)}
+    <div class="fs" style="margin-top:8px">Servicio</div>
+    ${row("Servicio", r.servicio || r.servicioNombre)}${row("Detalle", r.detalleServicio)}${row("Mes a recepcionar", r.mesRecepcion)}${row("Mes de pago", r.mesPago)}${row("Total", money(r.importe))}${row("Forma de pago", r.tipoPago)}${row("Atención", r.atencion)}${row("Comentarios", r.comentarios)}${row("Estado deuda", (r.tipoPago === "DEUDOR" || r.estadoDeuda === "con_deuda") ? "Con deuda" : "Sin deuda")}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn sec" id="rd_close" style="border:1px solid var(--line)">Cerrar</button>
+      ${canEditClientes() ? '<button class="btn" id="rd_recibo">Reenviar recibo</button>' : ''}
+    </div></div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = e => { if (e.target === bg) close(); };
+  bg.querySelector("#rd_x").onclick = close; bg.querySelector("#rd_close").onclick = close;
+  const rb = bg.querySelector("#rd_recibo"); if (rb) rb.onclick = () => { enviarReciboDe(r); close(); };
+}
+function recExport() {
+  const H = ["Fecha", "Hora", "N Recepcion", "N Comprobante", "Cliente", "NIT", "ID", "Rubro", "Servicio", "Detalle", "Mes recepcion", "Año", "Mes pago", "Total", "Forma pago", "Atencion", "Comentarios", "Estado deuda", "Correo", "Celular", "Registrado por"];
+  const rws = RECEP.map(r => [r.fecha || fmtFecha(r.fechaISO), r.hora || "", r.nroRecepcion || "", r.nroComprobante || "", r.clienteNombre || "", r.nit || "", r.clienteId || "", r.rubro || "", r.servicio || r.servicioNombre || "", r.detalleServicio || "", r.mesRecepcion || "", r.anio || "", r.mesPago || "", (Number(r.importe) || 0), r.tipoPago || "", r.atencion || "", r.comentarios || "", ((r.tipoPago === "DEUDOR" || r.estadoDeuda === "con_deuda") ? "Con deuda" : "Sin deuda"), r.clienteCorreo || "", r.clienteCelular || "", r.registradoPorNombre || ""]);
+  downloadCSV("CONTAX-Recepcion-" + hoyISO() + ".csv", H, rws);
 }
 async function enviarReciboDe(rec) {
   if (!rec) return;
   if (!rec.clienteCorreo) { alert("Esta recepción no tiene correo del cliente."); return; }
   const ok = await postRecibo(rec);
-  if (ok) { try { await setDoc(doc(db, "recepciones", rec.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} await recepLoad(); paintRecepcion(); alert("Recibo enviado (si la URL de recibos está configurada)."); }
-  else alert("No se pudo enviar. Configura la URL de recibos en ⚙️ Configuración.");
+  if (ok) { try { await setDoc(doc(db, "recepciones", rec.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} await recepLoad(); paintRecepcion(); alert("Orden de Recepción enviada (si la URL de recibos está configurada)."); }
+  else alert("No se pudo enviar. Configura la URL de recibos en Configuración.");
 }
 async function delRecepcion(rec) {
   if (!rec) return;
-  if (!confirm(`¿Eliminar el pago de "${rec.clienteNombre}" por ${money(rec.importe)}? No se puede deshacer.`)) return;
+  if (!confirm(`¿Eliminar la recepción N° ${rec.nroRecepcion} de "${rec.clienteNombre}" por ${money(rec.importe)}? No se puede deshacer.`)) return;
   try { await deleteDoc(doc(db, "recepciones", rec.id)); await recepLoad(); paintRecepcion(); } catch (e) { alert("No se pudo eliminar."); }
+}
+
+// ============================================================
+//  MÓDULO EGRESOS (gastos de la empresa) — colección "egresos"
+// ============================================================
+let EGRESOS = [], egLoaded = false;
+async function egLoad() {
+  try { const snap = await getDocs(collection(db, "egresos")); EGRESOS = snap.docs.map(d => Object.assign({ id: d.id }, d.data())); }
+  catch (e) { EGRESOS = []; }
+  EGRESOS.sort((a, b) => (b.fechaISO || "").localeCompare(a.fechaISO || ""));
+  egLoaded = true;
+}
+async function renderEgresos() {
+  el("v-egresos").innerHTML = `<h1>Egresos</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  await egLoad();
+  paintEgresos();
+}
+function paintEgresos() {
+  const canEdit = canEditClientes();
+  loadConfigDoc().then(cfg => {
+    const L = recListas(cfg);
+    const nextG = parseInt(cfg.nextGasto, 10) || 1002;
+    const now = new Date();
+    const total = EGRESOS.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+    const rows = EGRESOS.map(r => `<tr>
+       <td class="mono">${escape(r.fecha || fmtFecha(r.fechaISO))}</td>
+       <td class="mono">${escape(String(r.nroGasto || "—"))}</td>
+       <td><b>${escape(r.cuentaContable || "—")}</b></td>
+       <td>${escape(r.detalle || "—")}</td>
+       <td>${escape(r.tipoPago || "—")}</td>
+       <td>${escape(r.atencion || "—")}</td>
+       <td class="mono" style="text-align:right">${money(r.importe)}</td>
+       <td style="text-align:right">${isAdmin() ? `<button class="mini" data-dele="${r.id}">✕</button>` : ''}</td></tr>`).join("");
+    el("v-egresos").innerHTML = `<h1>Egresos</h1>
+      <p class="lead">Registro de gastos de la empresa por cuenta contable (alquiler, luz, sueldos, etc.).</p>
+      ${canEdit ? `<div class="formcard" style="max-width:820px">
+        <h3 style="margin:0 0 10px">Nuevo egreso</h3>
+        <div class="grid3">
+          <div class="field"><label>N° Gasto</label><input id="e_nro" value="${nextG}"></div>
+          <div class="field"><label>Fecha</label><input id="e_fecha" value="${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}"></div>
+          <div class="field"><label>Importe (Bs)</label><input id="e_imp" type="number" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Cuenta contable</label><select id="e_cuenta">${L.cuentas.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+          <div class="field"><label>Forma de pago</label><select id="e_pago">${L.pagos.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Detalle</label><input id="e_det" placeholder="Ej. alquiler oficina octubre"></div>
+          <div class="field"><label>Atención / responsable</label><select id="e_at"><option value="">—</option>${L.atencion.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+        </div>
+        <button class="btn" id="e_save">Registrar egreso</button>
+        <div class="msg" id="e_msg"></div>
+      </div>` : ''}
+      <div class="kpis" style="margin-top:10px">
+        <div class="kpi"><div class="n">${EGRESOS.length}</div><div class="l">Egresos</div></div>
+        <div class="kpi"><div class="n" style="color:var(--danger)">${money(total)}</div><div class="l">Total egresos</div></div>
+      </div>
+      <div class="toolbar"><button class="btn sec" id="e_export" style="border:1px solid var(--line)">⬇ Exportar</button></div>
+      <table><thead><tr><th>Fecha</th><th>N° Gasto</th><th>Cuenta</th><th>Detalle</th><th>Pago</th><th>Resp.</th><th style="text-align:right">Importe</th><th></th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="8" style="color:var(--muted)">Sin egresos todavía.</td></tr>`}</tbody></table>`;
+    if (el("e_save")) el("e_save").onclick = registrarEgreso;
+    if (el("e_export")) el("e_export").onclick = () => {
+      const H = ["Fecha", "N Gasto", "Cuenta contable", "Detalle", "Forma pago", "Responsable", "Importe"];
+      const rws = EGRESOS.map(r => [r.fecha || fmtFecha(r.fechaISO), r.nroGasto || "", r.cuentaContable || "", r.detalle || "", r.tipoPago || "", r.atencion || "", (Number(r.importe) || 0)]);
+      downloadCSV("CONTAX-Egresos-" + hoyISO() + ".csv", H, rws);
+    };
+    el("v-egresos").querySelectorAll("[data-dele]").forEach(b => b.onclick = async () => {
+      const r = EGRESOS.find(x => x.id === b.dataset.dele); if (!r) return;
+      if (!confirm(`¿Eliminar el egreso N° ${r.nroGasto} (${money(r.importe)})?`)) return;
+      try { await deleteDoc(doc(db, "egresos", r.id)); await egLoad(); paintEgresos(); } catch (e) { alert("No se pudo eliminar."); }
+    });
+  });
+}
+async function registrarEgreso() {
+  const msg = el("e_msg");
+  const imp = parseFloat(el("e_imp").value);
+  if (isNaN(imp) || imp < 0) { msg.className = "msg err"; msg.textContent = "Pon un importe válido."; return; }
+  const btn = el("e_save"); btn.disabled = true; btn.textContent = "Registrando…";
+  try {
+    const nro = await recNextNum("nextGasto", 1002);
+    const now = new Date();
+    const eg = {
+      nroGasto: nro, fechaISO: now.toISOString(), fecha: el("e_fecha").value.trim(),
+      cuentaContable: el("e_cuenta").value, detalle: el("e_det").value.trim(), importe: imp,
+      tipoPago: el("e_pago").value, atencion: el("e_at").value,
+      registradoPorUid: (ME && ME.uid) || "", registradoPorNombre: (ME && (ME.name || ME.email)) || "", createdAt: serverTimestamp()
+    };
+    await setDoc(doc(collection(db, "egresos")), eg);
+    await egLoad(); paintEgresos();
+  } catch (e) { btn.disabled = false; btn.textContent = "Registrar egreso"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
 }
 
 // ---------- DASHBOARD ----------
@@ -2073,14 +2320,25 @@ const IMP_DESTINOS = [
 ];
 const IMP_CAMPOS = [
   ["fecha", "Fecha"],
-  ["cliente", "Cliente (nombre)"],
+  ["hora", "Hora"],
+  ["nrorec", "N° Recepción"],
+  ["nrocom", "N° Comprobante / Recibo"],
+  ["cliente", "Cliente / Razón Social"],
+  ["nit", "NIT"],
+  ["idcli", "ID Cliente"],
+  ["rubro", "Presta servicios a / Rubro"],
   ["celular", "Celular"],
   ["correo", "Correo"],
-  ["servicio", "Servicio / detalle"],
-  ["importe", "Importe (Bs)"],
-  ["metodo", "Método de pago"],
-  ["estado", "Estado (opcional)"],
-  ["nota", "Nota (opcional)"]
+  ["servicio", "Servicio (SERVICIOS CONTAX)"],
+  ["detalle", "Detalle / Tipo de servicio"],
+  ["mesrec", "Mes a recepcionar"],
+  ["anio", "Año"],
+  ["mespago", "Mes de pago"],
+  ["importe", "Total / Importe (Bs)"],
+  ["metodo", "Forma de pago"],
+  ["atencion", "Atención"],
+  ["comentarios", "Comentarios"],
+  ["estado", "Estado (opcional)"]
 ];
 function impEstadoNorm(v) {
   const u = String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -2132,15 +2390,26 @@ async function impOnFile(e) {
     IMP_MAP = {};
     IMP_HEADERS.forEach((h, i) => {
       const n = h.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-      if (IMP_MAP.fecha == null && /fecha|dia|date/.test(n)) IMP_MAP.fecha = i;
+      if (IMP_MAP.nrorec == null && /n.?\s*recep|nro.?\s*recep|numero\s*recep/.test(n)) IMP_MAP.nrorec = i;
+      else if (IMP_MAP.nrocom == null && /comprob|recibo/.test(n)) IMP_MAP.nrocom = i;
+      else if (IMP_MAP.fecha == null && /fecha|^dia$|date/.test(n)) IMP_MAP.fecha = i;
+      else if (IMP_MAP.hora == null && /hora/.test(n)) IMP_MAP.hora = i;
+      else if (IMP_MAP.nit == null && /\bnit\b/.test(n)) IMP_MAP.nit = i;
+      else if (IMP_MAP.idcli == null && /\bid\b|id\s*cliente|codigo/.test(n)) IMP_MAP.idcli = i;
       else if (IMP_MAP.cliente == null && /cliente|nombre|razon/.test(n)) IMP_MAP.cliente = i;
+      else if (IMP_MAP.rubro == null && /rubro|presta\s*servicio/.test(n)) IMP_MAP.rubro = i;
       else if (IMP_MAP.celular == null && /celular|telefono|cel|whatsapp|movil/.test(n)) IMP_MAP.celular = i;
       else if (IMP_MAP.correo == null && /correo|email|mail/.test(n)) IMP_MAP.correo = i;
-      else if (IMP_MAP.servicio == null && /servicio|detalle|concepto|descrip|tramite|declarac/.test(n)) IMP_MAP.servicio = i;
-      else if (IMP_MAP.importe == null && /importe|monto|total|precio|bs|pago|cobro/.test(n)) IMP_MAP.importe = i;
-      else if (IMP_MAP.metodo == null && /metodo|forma|pago|qr|transfer/.test(n)) IMP_MAP.metodo = i;
+      else if (IMP_MAP.detalle == null && /detalle|tipo\s*de\s*serv/.test(n)) IMP_MAP.detalle = i;
+      else if (IMP_MAP.servicio == null && /servicio|concepto|descrip/.test(n)) IMP_MAP.servicio = i;
+      else if (IMP_MAP.mespago == null && /mes\s*de\s*pago|mes\s*pago/.test(n)) IMP_MAP.mespago = i;
+      else if (IMP_MAP.mesrec == null && /\bmes\b|mes\s*recep|mes\s*declar/.test(n)) IMP_MAP.mesrec = i;
+      else if (IMP_MAP.anio == null && /a.?o|year|gestion/.test(n)) IMP_MAP.anio = i;
+      else if (IMP_MAP.importe == null && /importe|monto|total|precio|cobro/.test(n)) IMP_MAP.importe = i;
+      else if (IMP_MAP.metodo == null && /metodo|forma|tipo\s*de\s*pago|transfer/.test(n)) IMP_MAP.metodo = i;
+      else if (IMP_MAP.atencion == null && /atenci|atendi|responsable/.test(n)) IMP_MAP.atencion = i;
+      else if (IMP_MAP.comentarios == null && /coment|observ|nota|referencia/.test(n)) IMP_MAP.comentarios = i;
       else if (IMP_MAP.estado == null && /estado|situacion|entreg/.test(n)) IMP_MAP.estado = i;
-      else if (IMP_MAP.nota == null && /nota|observ|coment|referencia/.test(n)) IMP_MAP.nota = i;
     });
     msg.className = "msg ok"; msg.textContent = `✓ ${IMP_ROWS.length} filas leídas. Revisa el emparejamiento de columnas abajo.`;
     impRenderCfg();
@@ -2181,19 +2450,39 @@ async function impRun() {
     if (!nombre && !impTxt) return; // fila vacía
     const estRaw = get(r, "estado");
     const estado = impEstadoNorm(estRaw) || estadoDef;
+    const servicio = get(r, "servicio");
+    const detalle = get(r, "detalle");
+    const metodo = get(r, "metodo");
+    const nit = get(r, "nit");
+    const fechaTxt = get(r, "fecha");
     docs.push({
-      fechaISO: arqDate(get(r, "fecha")) || "",
+      nroRecepcion: get(r, "nrorec"),
+      nroComprobante: get(r, "nrocom"),
+      fechaISO: arqDate(fechaTxt) || "",
+      fecha: fechaTxt,
+      hora: get(r, "hora"),
       clienteNombre: nombre,
+      nit: nit,
+      ultimoDigitoNit: nitUltimo(nit),
+      clienteId: get(r, "idcli"),
+      rubro: get(r, "rubro"),
       clienteCelular: get(r, "celular"),
       clienteCorreo: get(r, "correo"),
-      servicioNombre: get(r, "servicio"),
-      categoria: "",
-      tipo: tipo,
+      servicio: servicio,
+      servicioNombre: servicio,
+      detalleServicio: detalle,
+      mesRecepcion: get(r, "mesrec"),
+      anio: get(r, "anio"),
+      mesPago: get(r, "mespago"),
       importe: arqNum(impTxt) || 0,
-      metodoPago: get(r, "metodo"),
-      nota: get(r, "nota"),
+      metodoPago: metodo,
+      tipoPago: metodo,
+      atencion: get(r, "atencion"),
+      comentarios: get(r, "comentarios"),
+      tipo: tipo || recTipoDe(servicio, detalle),
       estado: estado,
-      reciboNro: "",
+      estadoDeuda: (/deudor/i.test(metodo) ? "con_deuda" : "sin_deuda"),
+      reciboNro: get(r, "nrocom"),
       reciboEnviado: false,
       origen: "importado",
       importLote: lote,

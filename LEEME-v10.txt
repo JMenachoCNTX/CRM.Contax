@@ -1,0 +1,95 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL  ·  Versión v10
+===============================================================
+
+Esta versión rehace la RECEPCIÓN para que sea igual a tu sistema real
+(con TODAS tus columnas) y agrega EGRESOS. Además el recibo por correo
+ahora es tu "Orden de Recepción".
+
+--------------------------------------------------------------
+RECEPCIÓN (rehecha, completa)
+--------------------------------------------------------------
+Ahora el formulario tiene dos bloques, como tu pantalla:
+
+ DATOS AUTOMÁTICOS (se llenan solos al elegir el cliente):
+   • N° Recepción y N° Comprobante (Recibo): AUTOMÁTICOS y continuos
+     (se configuran en Configuración → "Recepción: Numeración").
+     Son dos contadores distintos (N° Recepción ≠ N° Comprobante).
+   • Fecha, Hora, NIT, Último dígito del NIT, Presta servicios a
+     (Rubro), ID Cliente.
+
+ LLENAR DATOS:
+   • Cliente (lista desplegable que autocompleta NIT, correo, celular,
+     rubro, etc. desde la Base de Datos de clientes).
+   • Servicio (SERVICIOS CONTAX) y Detalle de servicio (Tipo).
+   • Mes a recepcionar  Y  Mes de pago  (son campos DISTINTOS).
+   • Total, Forma de pago, Atención, Comentarios (ej. fecha de pago).
+   • Casilla para enviar la Orden de Recepción en PDF al correo.
+
+El historial muestra todas las columnas y cada fila tiene "Ver" para
+el detalle completo. Marca "Con deuda" cuando la forma de pago es
+DEUDOR. Botón "Exportar" baja TODO en CSV.
+
+--------------------------------------------------------------
+EGRESOS (nuevo · menú Operaciones)
+--------------------------------------------------------------
+Registro de gastos de la empresa por cuenta contable (Alquiler, Luz,
+Sueldos, etc.), con N° de Gasto automático, fecha, importe, forma de
+pago, responsable y detalle. Con KPIs y exportación a CSV.
+
+--------------------------------------------------------------
+CONFIGURACIÓN (nuevo)
+--------------------------------------------------------------
+ • "Recepción: Numeración": defines desde qué número siguen el
+   N° Recepción (hoy 7048), N° Comprobante (hoy 7784) y N° Gasto (1002).
+ • "Recepción: Listas desplegables": editas (un valor por línea) las
+   listas de Servicios, Detalle de servicio, Formas de pago, Atención
+   y Cuentas contables. Ya vienen cargadas con tus valores.
+
+--------------------------------------------------------------
+IMPORTADOR (ampliado)
+--------------------------------------------------------------
+La pestaña Importar ahora reconoce TODAS las columnas de tu historial:
+Fecha, Hora, N° Recepción, N° Comprobante, Cliente/Razón Social, NIT,
+ID, Rubro, Celular, Correo, Servicio, Detalle, Mes a recepcionar, Año,
+Mes de pago, Total, Forma de pago, Atención, Comentarios y Estado.
+Así puedes importar tu "Historial Recepción" 2023→hoy tal cual.
+
+--------------------------------------------------------------
+ORDEN DE RECEPCIÓN POR CORREO (PUENTE-RECIBOS.gs · v2)
+--------------------------------------------------------------
+El PDF que se envía ahora es tu "Orden de Recepción" (banda azul
+CONTAX, Datos del Cliente, Datos de Recepción, Datos del Servicio,
+Total/Forma de pago/Atención, descuento de responsabilidad y pie con
+dirección, contacto 690-21969 y correo info@contaxbolivia.com).
+   >>> DEBES volver a publicar el nuevo PUENTE-RECIBOS.gs <<<
+   (Nueva implementación / nueva versión) con la cuenta de Gmail de
+   CONTAX, y confirmar la URL en Configuración → Recibos por correo.
+
+
+===============================================================
+ IMPORTANTE — REGLAS DE FIRESTORE (una colección nueva)
+===============================================================
+Se agregó la colección "egresos". Debes republicar las reglas
+(te paso el archivo firestore-rules-COMPLETO.txt actualizado).
+El bloque nuevo es:
+
+    match /egresos/{id} {
+      allow read: if portalView();
+      allow create, update: if portalEdit();
+      allow delete: if isAdmin();
+    }
+
+La Recepción sigue usando la colección "recepciones" (sin cambios de
+reglas). Solo "egresos" es nueva.
+
+
+ARCHIVOS DE ESTE PAQUETE
+------------------------
+ - index.html            (Panel v10 — SÚBELO a GitHub)
+ - app.js                (lógica v10 — SÚBELO a GitHub)
+ - config.js             (config v10 — SÚBELO a GitHub)
+ - PUENTE-RECIBOS.gs     (Orden de Recepción v2 — republícalo en Apps Script)
+ - firestore-rules-COMPLETO.txt (republica en Firebase · agrega "egresos")
+ - LEEME-v10.txt
+===============================================================
