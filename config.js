@@ -1,12 +1,12 @@
 // ============================================================
 //   NUMMEROS by CONTAX — Panel de Administración
-//   CONFIGURACIÓN  ·  VERSIÓN 2  ·  2026-09-07
+//   CONFIGURACIÓN  ·  VERSIÓN 3  ·  2026-09-07
 //   (proyecto de Firebase: crm-contax)
 // ============================================================
 //  Estos datos de Firebase son públicos por diseño: la seguridad
 //  real la dan las "reglas" de Firestore, no estas claves.
 // ============================================================
-window.APP_VERSION = "2";
+window.APP_VERSION = "6";
 
 window.APP_CONFIG = {
 

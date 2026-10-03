@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "2";
+const APP_VERSION = "6";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -57,6 +57,7 @@ const ROLE_ACCESS = {
 };
 function myAccess() { return ROLE_ACCESS[ME && ME.role] || null; }
 function canEditClientes() { const a = myAccess(); return !!a && a.clientes === "edit"; }
+function isAdmin() { const a = myAccess(); return !!a && a.groups.includes("admin"); }
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) { el("login").classList.remove("hidden"); el("app").classList.add("hidden"); el("agentOnly").classList.add("hidden"); return; }
@@ -97,6 +98,15 @@ function switchView(v, btn) {
   if (v === "inicio") renderInicio();
   if (v === "clientes") renderClientes();
   if (v === "basedatos") renderBaseDatos();
+  if (v === "tarifas") renderTarifas();
+  if (v === "asistente") renderAsistente();
+  if (v === "recepcion") renderRecepcion();
+  if (v === "dashboard") renderDashboard();
+  if (v === "declaraciones") renderLista("declaracion", "v-declaraciones", "Declaraciones");
+  if (v === "tramites") renderLista("tramite", "v-tramites", "Trámites");
+  if (v === "eeff") renderLista("eeff", "v-eeff", "Estados Financieros (EEFF)");
+  if (v === "calendario") renderCalendario();
+  if (v === "arqueo") renderArqueo();
   if (v === "presence") renderPresence();
   if (v === "historial") renderHistorial();
   if (v === "bandeja") renderBandeja();
@@ -575,6 +585,16 @@ async function renderConfig() {
       <div class="msg" id="c_bdmsg"></div>
     </div>
     <div class="formcard">
+      <h3 style="margin:0 0 6px">Recibos por correo (Gmail CONTAX)</h3>
+      <p class="note" style="margin:0 0 12px">Pega la URL del "puente" de recibos (Apps Script <b>PUENTE-RECIBOS.gs</b>) publicado desde la cuenta de Gmail de CONTAX.
+      Con esto la pestaña <b>Recepción</b>envía automáticamente el recibo en PDF al correo del cliente cuando registras un pago.
+      Si lo dejas vacío, igual se registra el pago pero no se envía el correo.</p>
+      <label>URL del puente de Recibos (…/exec)</label>
+      <input id="c_recibos" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.recibosUrl || "")}">
+      <button class="btn" id="c_recibossave">Guardar URL</button>
+      <div class="msg" id="c_recibosmsg"></div>
+    </div>
+    <div class="formcard">
       <h3 style="margin:0 0 6px">Conocimiento de la empresa (para la IA)</h3>
       <p class="note" style="margin:0 0 12px">Escribe aquí todo lo que la IA debe saber de tu empresa: qué es CONTAX, servicios y precios,
       formas de pago, horarios, procedimientos, tono de respuesta, datos de contacto, preguntas frecuentes, etc.
@@ -619,6 +639,11 @@ Contacto: …">${escape(cfg.aiContext || "")}</textarea>
   el("c_bdsave").onclick = async () => {
     const msg = el("c_bdmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
     try { await setDoc(doc(db, "config", "app"), { bdUrl: el("c_bdurl").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); bdUrlCache = ""; bdLoaded = false; msg.className = "msg ok"; msg.textContent = "✓ URL guardada. Abre la pestaña Base de Datos."; }
+    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+  };
+  el("c_recibossave").onclick = async () => {
+    const msg = el("c_recibosmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    try { await setDoc(doc(db, "config", "app"), { recibosUrl: el("c_recibos").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada. La pestaña Recepción ya puede enviar recibos."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
   el("c_ctxsave").onclick = async () => {
@@ -1150,5 +1175,816 @@ async function bdSave(item, keyValue) {
   try { await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) }); return true; }
   catch (e) { return false; }
 }
+
+// ============================================================
+//  MÓDULO TARIFAS — catálogo de servicios (alimenta a la IA)
+// ============================================================
+let TARIFAS = [], tarFilter = "";
+async function tarLoad() {
+  try { const snap = await getDocs(collection(db, "tarifas")); TARIFAS = snap.docs.map(d => Object.assign({ id: d.id }, d.data())); }
+  catch (e) { TARIFAS = []; }
+  TARIFAS.sort((a, b) => (a.categoria || "").localeCompare(b.categoria || "") || (a.orden || 0) - (b.orden || 0) || (a.nombre || "").localeCompare(b.nombre || ""));
+}
+function tarMoney(v) { const n = Number(v); return isNaN(n) ? "" : ("Bs " + n.toLocaleString("es-BO", { maximumFractionDigits: 2 })); }
+async function renderTarifas() {
+  el("v-tarifas").innerHTML = `<h1>Tarifas</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  await tarLoad();
+  paintTarifas();
+}
+function paintTarifas() {
+  const admin = isAdmin();
+  const term = tarFilter.toLowerCase().trim();
+  const list = TARIFAS.filter(t => !term || `${t.nombre || ""} ${t.categoria || ""} ${t.descripcion || ""}`.toLowerCase().includes(term));
+  const cats = [...new Set(list.map(t => t.categoria || "General"))];
+  let rows = "";
+  cats.forEach(cat => {
+    rows += `<tr><td colspan="5" class="fs" style="border:0;padding:16px 0 6px">${escape(cat)}</td></tr>`;
+    list.filter(t => (t.categoria || "General") === cat).forEach(t => {
+      const precio = (t.precio != null && t.precio !== "") ? tarMoney(t.precio) : (t.precioTexto ? escape(t.precioTexto) : "—");
+      rows += `<tr>
+        <td><b>${escape(t.nombre || "")}</b>${t.activo === false ? ' <span class="badge off">inactivo</span>' : ''}</td>
+        <td style="white-space:nowrap"><b>${precio}</b></td>
+        <td>${escape(t.plazo || "—")}</td>
+        <td style="color:var(--muted);max-width:380px">${escape(t.descripcion || "")}</td>
+        <td style="text-align:right;white-space:nowrap">${admin ? `<button class="mini" data-edit="${t.id}">Editar</button> <button class="mini" data-del="${t.id}">✕</button>` : ''}</td></tr>`;
+    });
+  });
+  el("v-tarifas").innerHTML = `<h1>Tarifas</h1>
+    <p class="lead">Catálogo de servicios con precios, plazos y detalle. El Asistente IA del Panel lo usa para responder. ${admin ? 'Edita aquí y se actualiza para todo el equipo.' : ''}</p>
+    <div class="toolbar">
+      <input id="tar_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar servicio…" value="${escape(tarFilter)}">
+      ${admin ? '<button class="btn" id="tar_new">＋ Nuevo servicio</button>' : ''}
+      <span class="msg" id="tar_msg" style="align-self:center"></span>
+    </div>
+    <table><thead><tr><th>Servicio</th><th>Precio</th><th>Plazo</th><th>En qué consiste</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="5" style="color:var(--muted)">Aún no hay servicios. ${admin ? 'Crea el primero con “＋ Nuevo servicio”.' : ''}</td></tr>`}</tbody></table>`;
+  el("tar_search").oninput = () => { tarFilter = el("tar_search").value; paintTarifas(); };
+  if (el("tar_new")) el("tar_new").onclick = () => openTarifaModal(null);
+  el("v-tarifas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openTarifaModal(TARIFAS.find(x => x.id === b.dataset.edit)));
+  el("v-tarifas").querySelectorAll("[data-del]").forEach(b => b.onclick = () => delTarifa(TARIFAS.find(x => x.id === b.dataset.del)));
+}
+function openTarifaModal(t) {
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;width:520px;max-width:96vw;max-height:92vh;overflow:auto">
+    <h3 style="margin:0 0 14px">${t ? 'Editar' : 'Nuevo'} servicio</h3>
+    <div class="field"><label>Nombre del servicio</label><input id="t_nombre" value="${t ? escape(t.nombre || '') : ''}" placeholder="Ej. Declaración jurada mensual"></div>
+    <div class="grid2">
+      <div class="field"><label>Categoría</label><input id="t_cat" list="t_catlist" value="${t ? escape(t.categoria || '') : ''}" placeholder="Ej. Trámites"></div>
+      <div class="field"><label>Plazo de entrega</label><input id="t_plazo" value="${t ? escape(t.plazo || '') : ''}" placeholder="Ej. 48 a 72 hrs hábiles"></div>
+    </div>
+    <datalist id="t_catlist">${[...new Set(TARIFAS.map(x => x.categoria).filter(Boolean))].map(c => `<option value="${escape(c)}">`).join("")}</datalist>
+    <div class="field"><label>Tipo (para las listas de trabajo)</label><select id="t_tipo"><option value="">Ninguno</option><option value="declaracion">Declaración</option><option value="tramite">Trámite</option><option value="eeff">Balance / EEFF</option><option value="otro">Otro</option></select></div>
+    <div class="grid2">
+      <div class="field"><label>Precio (Bs) — número</label><input id="t_precio" type="number" step="0.01" value="${t && t.precio != null ? escape(String(t.precio)) : ''}" placeholder="Ej. 150"></div>
+      <div class="field"><label>…o precio en texto (si varía)</label><input id="t_preciotxt" value="${t ? escape(t.precioTexto || '') : ''}" placeholder="Ej. Desde Bs 250 / estacional"></div>
+    </div>
+    <div class="field"><label>En qué consiste (lo lee la IA y sirve para el cliente)</label><textarea id="t_desc" style="min-height:90px">${t ? escape(t.descripcion || '') : ''}</textarea></div>
+    <div class="field"><label><input type="checkbox" id="t_activo" ${t && t.activo === false ? '' : 'checked'} style="width:auto;margin-right:6px">Activo (visible para la IA)</label></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn sec" id="t_cancel">Cancelar</button>
+      <button class="btn" id="t_save">Guardar</button>
+    </div><div class="msg" id="t_modmsg"></div></div>`;
+  document.body.appendChild(bg);
+  bg.querySelector("#t_tipo").value = t ? (t.tipo || "") : "";
+  const close = () => bg.remove();
+  bg.onclick = e => { if (e.target === bg) close(); };
+  bg.querySelector("#t_cancel").onclick = close;
+  bg.querySelector("#t_save").onclick = async () => {
+    const nombre = bg.querySelector("#t_nombre").value.trim();
+    const m = bg.querySelector("#t_modmsg");
+    if (!nombre) { m.className = "msg err"; m.textContent = "Ponle un nombre al servicio."; return; }
+    const pv = bg.querySelector("#t_precio").value.trim();
+    const item = {
+      nombre, categoria: bg.querySelector("#t_cat").value.trim() || "General", plazo: bg.querySelector("#t_plazo").value.trim(),
+      precio: pv === "" ? null : Number(pv), precioTexto: bg.querySelector("#t_preciotxt").value.trim(),
+      descripcion: bg.querySelector("#t_desc").value.trim(), tipo: bg.querySelector("#t_tipo").value, activo: bg.querySelector("#t_activo").checked, updatedAt: serverTimestamp()
+    };
+    const btn = bg.querySelector("#t_save"); btn.disabled = true; btn.textContent = "Guardando…";
+    try {
+      if (t && t.id) await setDoc(doc(db, "tarifas", t.id), item, { merge: true });
+      else await setDoc(doc(collection(db, "tarifas")), item);
+      await tarLoad(); await saveTarifasText(); close(); paintTarifas();
+    } catch (e) { btn.disabled = false; btn.textContent = "Guardar"; m.className = "msg err"; m.textContent = "Error: " + (e.code || e.message); }
+  };
+}
+function delTarifa(t) {
+  if (!t) return;
+  if (!confirm(`¿Eliminar el servicio "${t.nombre}"? Esta acción no se puede deshacer.`)) return;
+  deleteDoc(doc(db, "tarifas", t.id)).then(async () => { await tarLoad(); await saveTarifasText(); paintTarifas(); });
+}
+function buildTarifasText() {
+  const act = TARIFAS.filter(t => t.activo !== false);
+  if (!act.length) return "";
+  let txt = "TARIFAS Y SERVICIOS DE CONTAX (precios y plazos vigentes; usa estos datos para cotizar):\n";
+  act.forEach(t => {
+    const precio = (t.precio != null && t.precio !== "") ? ("Bs " + t.precio) : (t.precioTexto || "consultar");
+    txt += `- ${t.nombre}${t.categoria ? ` [${t.categoria}]` : ''}: ${precio}${t.plazo ? `, plazo ${t.plazo}` : ''}.${t.descripcion ? ` ${t.descripcion}` : ''}\n`;
+  });
+  return txt.slice(0, 6000);
+}
+async function saveTarifasText() { try { await setDoc(doc(db, "config", "app"), { tarifasText: buildTarifasText(), updatedAt: serverTimestamp() }, { merge: true }); } catch (e) {} }
+
+// ============================================================
+//  MÓDULO ASISTENTE IA (Panel) — chat para todo el equipo
+// ============================================================
+let asisMsgs = [];
+async function renderAsistente() {
+  const cfg = await loadConfigDoc();
+  const hasKey = !!(cfg.aiKey || cfg.geminiKey);
+  el("v-asistente").innerHTML = `<h1>Asistente IA</h1>
+    <p class="lead">Pregúntale lo que necesites. Conoce el conocimiento de la empresa y las tarifas. ${hasKey ? '' : '<b style="color:var(--danger)">Falta configurar la clave de IA</b> en ⚙️ Configuración.'}</p>
+    <div id="as_chat" style="border:1px solid var(--line);border-radius:14px;background:var(--panel);min-height:320px;max-height:58vh;overflow:auto;padding:16px;margin-bottom:12px"></div>
+    <textarea id="as_in" style="width:100%;min-height:58px;padding:11px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);font-size:14px;font-family:inherit" placeholder="Escribe tu pregunta…  (Ctrl/Cmd + Enter para enviar)"></textarea>
+    <div class="toolbar" style="margin-top:10px">
+      <button class="btn" id="as_send">Enviar</button>
+      <button class="btn sec" id="as_clear">Limpiar conversación</button>
+    </div>`;
+  paintAsis();
+  el("as_send").onclick = asisSend;
+  el("as_clear").onclick = () => { asisMsgs = []; paintAsis(); };
+  el("as_in").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); asisSend(); } });
+}
+function paintAsis() {
+  const c = el("as_chat"); if (!c) return;
+  if (!asisMsgs.length) { c.innerHTML = `<div style="color:var(--muted);text-align:center;padding:40px 10px">Escribe tu primera pregunta. Por ejemplo:<br>“¿Cuánto cuesta la actualización de matrícula y qué incluye?”</div>`; return; }
+  c.innerHTML = asisMsgs.map(m => {
+    const me = m.role === "user";
+    return `<div style="display:flex;justify-content:${me ? 'flex-end' : 'flex-start'};margin-bottom:10px">
+      <div style="max-width:82%;padding:10px 13px;border-radius:12px;white-space:pre-wrap;font-size:13.5px;line-height:1.5;${me ? 'background:var(--accent);color:var(--accent-ink)' : 'background:var(--panel2);border:1px solid var(--line);color:var(--txt)'}">${escape(m.text)}</div></div>`;
+  }).join("");
+  c.scrollTop = c.scrollHeight;
+}
+async function asisSend() {
+  const inp = el("as_in"); const q = (inp.value || "").trim(); if (!q) return;
+  asisMsgs.push({ role: "user", text: q }); inp.value = ""; paintAsis();
+  asisMsgs.push({ role: "assistant", text: "…" }); paintAsis();
+  const cfg = await loadConfigDoc();
+  let sys = "Eres el asistente interno de CONTAX (consultora de contabilidad e impuestos en Santa Cruz, Bolivia). Responde de forma clara, útil y bien organizada, con tono cordial y profesional. Si la pregunta es sobre precios o servicios, usa EXACTAMENTE las tarifas provistas. No inventes datos; si no lo sabes, dilo con honestidad.";
+  if (cfg.aiContext) sys += "\n\nCONOCIMIENTO DE LA EMPRESA:\n" + String(cfg.aiContext).slice(0, 6000);
+  if (cfg.tarifasText) sys += "\n\n" + String(cfg.tarifasText).slice(0, 6000);
+  try {
+    const r = await panelAI(cfg, sys, q);
+    asisMsgs[asisMsgs.length - 1] = { role: "assistant", text: r || "(sin respuesta)" };
+  } catch (e) {
+    asisMsgs[asisMsgs.length - 1] = { role: "assistant", text: "⚠️ " + (e.message || "No se pudo contactar a la IA.") };
+  }
+  paintAsis();
+}
+async function panelAI(cfg, system, user) {
+  const key = (cfg.aiKey || cfg.geminiKey || "").trim();
+  if (!key) throw new Error("Falta la clave de IA. Configúrala en ⚙️ Configuración.");
+  const prov = cfg.provider || (/^sk-/.test(key) ? "deepseek" : "gemini");
+  if (prov === "deepseek") {
+    const res = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({ model: cfg.aiModel || "deepseek-chat", messages: [{ role: "system", content: system }, { role: "user", content: user }], temperature: 0.6 })
+    });
+    if (!res.ok) { let t = ""; try { t = ((await res.json()).error || {}).message || ""; } catch (e) {} throw new Error("DeepSeek: " + (t || res.status)); }
+    const d = await res.json(); return ((((d.choices || [])[0] || {}).message || {}).content || "").trim();
+  }
+  const models = [cfg.aiModel, "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"].filter((m, i, a) => m && a.indexOf(m) === i);
+  const body = JSON.stringify({ system_instruction: { parts: [{ text: system }] }, contents: [{ role: "user", parts: [{ text: user }] }], generationConfig: { temperature: 0.6, maxOutputTokens: 900 } });
+  let lastErr = "";
+  for (const model of models) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      if (!res.ok) { let t = ""; try { t = ((await res.json()).error || {}).message || ""; } catch (e) {} lastErr = t || ("HTTP " + res.status); if (res.status === 404) continue; throw new Error("Gemini: " + lastErr); }
+      const d = await res.json();
+      const txt = ((((d.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("").trim();
+      if (txt) return txt;
+      lastErr = "respuesta vacía";
+    } catch (e) { lastErr = e.message; }
+  }
+  throw new Error("IA: " + (lastErr || "sin respuesta"));
+}
+
+
+// ============================================================
+//  MÓDULO OPERACIONES — Recepción · Dashboard · Listas
+// ============================================================
+let RECEP = [], recepLoaded = false, recFilterMes = "", recFlash = "";
+async function recepLoad() {
+  try { const snap = await getDocs(collection(db, "recepciones")); RECEP = snap.docs.map(d => Object.assign({ id: d.id }, d.data())); }
+  catch (e) { RECEP = []; }
+  RECEP.sort((a, b) => (b.fechaISO || "").localeCompare(a.fechaISO || ""));
+  recepLoaded = true;
+}
+function money(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtFecha(iso) { if (!iso) return ""; try { return new Date(iso).toLocaleString("es-BO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return iso; } }
+function mesKey(iso) { return (iso || "").slice(0, 7); }
+async function recibosUrlGet() { const cfg = await loadConfigDoc(); return (cfg.recibosUrl || "").trim(); }
+async function postRecibo(rec) {
+  const url = await recibosUrlGet(); if (!url) return false;
+  const cfg = await loadConfigDoc();
+  const payload = { action: "recibo", to: rec.clienteCorreo, nombre: rec.clienteNombre, servicio: rec.servicioNombre, detalle: rec.detalle || "", nota: rec.nota || "", importe: rec.importe, metodo: rec.metodoPago || "", fecha: fmtFecha(rec.fechaISO), reciboNro: rec.reciboNro, empresa: (cfg.company || "CONTAX") };
+  try { await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload) }); return true; }
+  catch (e) { return false; }
+}
+
+// ---------- RECEPCIÓN ----------
+async function renderRecepcion() {
+  el("v-recepcion").innerHTML = `<h1>Recepción</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  await tarLoad(); await recepLoad();
+  paintRecepcion();
+}
+function paintRecepcion() {
+  const canEdit = canEditClientes();
+  const serv = TARIFAS.filter(t => t.activo !== false);
+  const servOpts = serv.map(t => `<option value="${t.id}">${escape(t.nombre)}${t.precio != null && t.precio !== "" ? ` — ${money(t.precio)}` : ''}</option>`).join("");
+  const metodos = ["QR", "Transferencia", "Efectivo", "Tarjeta", "Otro"];
+  const meses = [...new Set(RECEP.map(r => mesKey(r.fechaISO)).filter(Boolean))].sort().reverse();
+  if (!recFilterMes && meses.length) recFilterMes = meses[0];
+  const list = RECEP.filter(r => !recFilterMes || mesKey(r.fechaISO) === recFilterMes);
+  const total = list.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+  const rows = list.map(r => `<tr>
+     <td class="mono">${escape(fmtFecha(r.fechaISO))}</td>
+     <td><b>${escape(r.clienteNombre || "—")}</b>${r.clienteCelular ? `<div style="color:var(--muted);font-size:12px">${escape(r.clienteCelular)}</div>` : ''}</td>
+     <td>${escape(r.servicioNombre || "—")}</td>
+     <td>${escape(r.metodoPago || "—")}</td>
+     <td class="mono" style="text-align:right">${money(r.importe)}</td>
+     <td style="text-align:center">${r.reciboEnviado ? '<span class="badge ok">enviado</span>' : '<span class="badge off">—</span>'}</td>
+     <td style="text-align:right;white-space:nowrap">${canEdit ? `<button class="mini" data-recibo="${r.id}">Recibo</button>${isAdmin() ? ` <button class="mini" data-delr="${r.id}">✕</button>` : ''}` : ''}</td></tr>`).join("");
+  el("v-recepcion").innerHTML = `<h1>Recepción</h1>
+    <p class="lead">Registra los pagos de los clientes. Cada registro alimenta el Dashboard y las listas de trabajo, y puede enviar un recibo en PDF al correo del cliente.</p>
+    ${canEdit ? `<div class="formcard" style="max-width:760px">
+      <h3 style="margin:0 0 12px">Registrar un pago</h3>
+      <div class="grid2">
+        <div class="field"><label>Cliente (nombre)</label><input id="r_nombre" placeholder="Nombre o razón social"></div>
+        <div class="field"><label>Celular</label><input id="r_cel" placeholder="Ej. 7xxxxxxx"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Correo (para el recibo)</label><input id="r_correo" type="email" placeholder="cliente@correo.com"></div>
+        <div class="field"><label>Método de pago</label><select id="r_metodo">${metodos.map(m => `<option>${m}</option>`).join("")}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Servicio</label><select id="r_serv"><option value="">— elegir servicio —</option>${servOpts}</select></div>
+        <div class="field"><label>Importe (Bs)</label><input id="r_importe" type="number" step="0.01" placeholder="0.00"></div>
+      </div>
+      <div class="field"><label>Nota / detalle adicional (opcional)</label><input id="r_nota" placeholder="Ej. mes de octubre, incluye…"></div>
+      <div class="field"><label><input type="checkbox" id="r_enviar" checked style="width:auto;margin-right:6px">Enviar recibo en PDF al correo del cliente</label></div>
+      <button class="btn" id="r_save">Registrar pago</button>
+      <div class="msg" id="r_msg"></div>
+    </div>` : '<div class="note">Tu rol puede ver la recepción pero no registrar pagos.</div>'}
+    <div class="kpis" style="margin-top:10px">
+      <div class="kpi"><div class="n">${list.length}</div><div class="l">Pagos del período</div></div>
+      <div class="kpi"><div class="n">${money(total)}</div><div class="l">Ingresos del período</div></div>
+    </div>
+    <div class="toolbar">
+      <span class="note" style="align-self:center">Mes:</span>
+      <select id="r_mes" class="mini" style="padding:9px">${meses.map(m => `<option value="${m}" ${m === recFilterMes ? 'selected' : ''}>${m}</option>`).join("") || '<option value="">—</option>'}</select>
+    </div>
+    <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Servicio</th><th>Método</th><th style="text-align:right">Importe</th><th>Recibo</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="7" style="color:var(--muted)">Sin pagos en este período.</td></tr>`}</tbody></table>`;
+  const sv = el("r_serv");
+  if (sv) sv.onchange = () => { const t = TARIFAS.find(x => x.id === sv.value); if (t && t.precio != null && t.precio !== "") el("r_importe").value = t.precio; };
+  if (el("r_mes")) el("r_mes").onchange = () => { recFilterMes = el("r_mes").value; paintRecepcion(); };
+  if (el("r_save")) el("r_save").onclick = registrarPago;
+  el("v-recepcion").querySelectorAll("[data-recibo]").forEach(b => b.onclick = () => enviarReciboDe(RECEP.find(x => x.id === b.dataset.recibo)));
+  el("v-recepcion").querySelectorAll("[data-delr]").forEach(b => b.onclick = () => delRecepcion(RECEP.find(x => x.id === b.dataset.delr)));
+  if (recFlash && el("r_msg")) { el("r_msg").className = "msg ok"; el("r_msg").textContent = recFlash; recFlash = ""; }
+}
+async function registrarPago() {
+  const msg = el("r_msg");
+  const nombre = el("r_nombre").value.trim();
+  const servId = el("r_serv").value;
+  const importe = parseFloat(el("r_importe").value);
+  if (!nombre) { msg.className = "msg err"; msg.textContent = "Pon el nombre del cliente."; return; }
+  if (isNaN(importe) || importe < 0) { msg.className = "msg err"; msg.textContent = "Pon un importe válido."; return; }
+  const t = TARIFAS.find(x => x.id === servId);
+  const now = new Date();
+  const reciboNro = "CTX-" + now.toISOString().slice(2, 10).replace(/-/g, "") + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+  const servNombre = t ? t.nombre : (el("r_serv").selectedOptions[0] ? el("r_serv").selectedOptions[0].text.replace(/ — .*$/, "") : "");
+  const rec = {
+    fechaISO: now.toISOString(),
+    clienteNombre: nombre, clienteCelular: el("r_cel").value.trim(), clienteCorreo: el("r_correo").value.trim(),
+    servicioId: servId || "", servicioNombre: servNombre, categoria: t ? (t.categoria || "") : "", tipo: t ? (t.tipo || "") : "", detalle: t ? (t.descripcion || "") : "",
+    importe, metodoPago: el("r_metodo").value, nota: el("r_nota").value.trim(),
+    estado: "pendiente", reciboNro, reciboEnviado: false,
+    registradoPorUid: (ME && ME.uid) || "", registradoPorNombre: (ME && (ME.name || ME.email)) || "", createdAt: serverTimestamp()
+  };
+  const btn = el("r_save"); btn.disabled = true; btn.textContent = "Registrando…";
+  const quiereRecibo = el("r_enviar").checked;
+  try {
+    const ref = doc(collection(db, "recepciones"));
+    await setDoc(ref, rec); rec.id = ref.id;
+    let enviado = false;
+    if (quiereRecibo && rec.clienteCorreo) {
+      enviado = await postRecibo(rec);
+      if (enviado) { try { await setDoc(doc(db, "recepciones", ref.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} }
+    }
+    recFlash = "✓ Pago registrado" + (quiereRecibo ? (rec.clienteCorreo ? (enviado ? " y recibo enviado al correo." : " (no se pudo enviar el recibo; revisa la URL de recibos en Configuración).") : " (sin correo: no se envió recibo).") : ".");
+    await recepLoad();
+    paintRecepcion();
+  } catch (e) { btn.disabled = false; btn.textContent = "Registrar pago"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
+}
+async function enviarReciboDe(rec) {
+  if (!rec) return;
+  if (!rec.clienteCorreo) { alert("Esta recepción no tiene correo del cliente."); return; }
+  const ok = await postRecibo(rec);
+  if (ok) { try { await setDoc(doc(db, "recepciones", rec.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} await recepLoad(); paintRecepcion(); alert("Recibo enviado (si la URL de recibos está configurada)."); }
+  else alert("No se pudo enviar. Configura la URL de recibos en ⚙️ Configuración.");
+}
+async function delRecepcion(rec) {
+  if (!rec) return;
+  if (!confirm(`¿Eliminar el pago de "${rec.clienteNombre}" por ${money(rec.importe)}? No se puede deshacer.`)) return;
+  try { await deleteDoc(doc(db, "recepciones", rec.id)); await recepLoad(); paintRecepcion(); } catch (e) { alert("No se pudo eliminar."); }
+}
+
+// ---------- DASHBOARD ----------
+async function renderDashboard() {
+  el("v-dashboard").innerHTML = `<h1>Dashboard</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  await recepLoad();
+  paintDashboard();
+}
+function paintDashboard() {
+  const total = RECEP.length;
+  const ingresos = RECEP.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+  const mesAct = new Date().toISOString().slice(0, 7);
+  const delMes = RECEP.filter(r => mesKey(r.fechaISO) === mesAct);
+  const ingMes = delMes.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+  const porCat = {}; RECEP.forEach(r => { const k = r.categoria || r.servicioNombre || "Otros"; porCat[k] = porCat[k] || { n: 0, m: 0 }; porCat[k].n++; porCat[k].m += Number(r.importe) || 0; });
+  const porMetodo = {}; RECEP.forEach(r => { const k = r.metodoPago || "—"; porMetodo[k] = (porMetodo[k] || 0) + (Number(r.importe) || 0); });
+  const meses = {}; RECEP.forEach(r => { const k = mesKey(r.fechaISO); if (k) meses[k] = (meses[k] || 0) + (Number(r.importe) || 0); });
+  const mesesK = Object.keys(meses).sort().slice(-6);
+  const maxMes = Math.max(1, ...mesesK.map(k => meses[k]));
+  const tipoCount = tp => RECEP.filter(r => r.tipo === tp).length;
+  el("v-dashboard").innerHTML = `<h1>Dashboard</h1><p class="lead">Resumen general de la operación, todo en un solo lugar.</p>
+    <div class="kpis">
+      <div class="kpi"><div class="n">${total}</div><div class="l">Total recepcionados</div></div>
+      <div class="kpi"><div class="n">${money(ingresos)}</div><div class="l">Ingresos totales</div></div>
+      <div class="kpi"><div class="n">${delMes.length}</div><div class="l">Pagos este mes</div></div>
+      <div class="kpi"><div class="n" style="color:var(--green)">${money(ingMes)}</div><div class="l">Ingresos este mes</div></div>
+      <div class="kpi"><div class="n">${tipoCount("declaracion")}</div><div class="l">Declaraciones</div></div>
+      <div class="kpi"><div class="n">${tipoCount("tramite")}</div><div class="l">Trámites</div></div>
+      <div class="kpi"><div class="n">${tipoCount("eeff")}</div><div class="l">EEFF / Balances</div></div>
+    </div>
+    <div class="grid2" style="gap:16px;align-items:start">
+      <div class="formcard" style="max-width:none"><h3 style="margin:0 0 12px">Ingresos por mes</h3>
+        ${mesesK.length ? mesesK.map(k => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px"><span class="mono" style="width:62px;color:var(--muted)">${k}</span><span style="flex:1;height:10px;background:var(--panel2);border-radius:20px;overflow:hidden"><i style="display:block;height:100%;width:${Math.round(meses[k] / maxMes * 100)}%;background:var(--accent);border-radius:20px"></i></span><span class="mono" style="width:120px;text-align:right">${money(meses[k])}</span></div>`).join('') : '<div class="note">Aún no hay datos. Registra pagos en Recepción.</div>'}
+      </div>
+      <div class="formcard" style="max-width:none"><h3 style="margin:0 0 12px">Por servicio / categoría</h3>
+        <table><thead><tr><th>Categoría</th><th style="text-align:right">N°</th><th style="text-align:right">Ingresos</th></tr></thead><tbody>${Object.keys(porCat).sort((a, b) => porCat[b].m - porCat[a].m).map(k => `<tr><td>${escape(k)}</td><td class="mono" style="text-align:right">${porCat[k].n}</td><td class="mono" style="text-align:right">${money(porCat[k].m)}</td></tr>`).join('') || '<tr><td class="note" colspan="3">Sin datos</td></tr>'}</tbody></table>
+      </div>
+    </div>
+    <div class="formcard" style="max-width:none"><h3 style="margin:0 0 12px">Por método de pago</h3>
+      <table><thead><tr><th>Método</th><th style="text-align:right">Ingresos</th></tr></thead><tbody>${Object.keys(porMetodo).map(k => `<tr><td>${escape(k)}</td><td class="mono" style="text-align:right">${money(porMetodo[k])}</td></tr>`).join('') || '<tr><td class="note" colspan="2">Sin datos</td></tr>'}</tbody></table>
+    </div>`;
+}
+
+// ---------- LISTAS (Declaraciones / Trámites / EEFF) ----------
+const ESTADOS_LISTA = [["pendiente", "Pendiente"], ["en_proceso", "En proceso"], ["entregado", "Entregado"]];
+async function renderLista(tipo, viewId, titulo) {
+  el(viewId).innerHTML = `<h1>${escape(titulo)}</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  await recepLoad();
+  paintLista(tipo, viewId, titulo);
+}
+function paintLista(tipo, viewId, titulo) {
+  const canEdit = canEditClientes();
+  const list = RECEP.filter(r => r.tipo === tipo);
+  const pend = list.filter(r => (r.estado || "pendiente") !== "entregado").length;
+  const rows = list.map(r => {
+    const est = r.estado || "pendiente";
+    const ctrl = canEdit ? `<select class="mini" data-estado="${r.id}">${ESTADOS_LISTA.map(([v, l]) => `<option value="${v}" ${v === est ? 'selected' : ''}>${l}</option>`).join('')}</select>` : `<span class="badge ${est === 'entregado' ? 'ok' : 'off'}">${est}</span>`;
+    return `<tr>
+      <td class="mono">${escape(fmtFecha(r.fechaISO))}</td>
+      <td><b>${escape(r.clienteNombre || "—")}</b>${r.clienteCelular ? `<div style="color:var(--muted);font-size:12px">${escape(r.clienteCelular)}</div>` : ''}</td>
+      <td>${escape(r.servicioNombre || "—")}</td>
+      <td class="mono" style="text-align:right">${money(r.importe)}</td>
+      <td>${ctrl}</td></tr>`;
+  }).join("");
+  el(viewId).innerHTML = `<h1>${escape(titulo)}</h1>
+    <p class="lead">Trabajo generado desde la Recepción. ${canEdit ? 'Cambia el estado conforme avances con el equipo.' : ''}</p>
+    <div class="kpis"><div class="kpi"><div class="n">${list.length}</div><div class="l">Total</div></div><div class="kpi"><div class="n" style="color:var(--warn)">${pend}</div><div class="l">Por entregar</div></div></div>
+    <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Servicio</th><th style="text-align:right">Importe</th><th>Estado</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="5" style="color:var(--muted)">Nada por aquí todavía. Se llena cuando registres pagos de este tipo en Recepción (el tipo se define en Tarifas).</td></tr>`}</tbody></table>`;
+  el(viewId).querySelectorAll("[data-estado]").forEach(sel => sel.onchange = async () => {
+    try { await setDoc(doc(db, "recepciones", sel.dataset.estado), { estado: sel.value }, { merge: true }); const r = RECEP.find(x => x.id === sel.dataset.estado); if (r) r.estado = sel.value; paintLista(tipo, viewId, titulo); }
+    catch (e) { alert("No se pudo guardar el estado."); }
+  });
+}
+
+
+// ============================================================
+//  MÓDULO CALENDARIO (Operaciones) — agenda del equipo
+//  Colección Firestore: "eventos"
+// ============================================================
+let EVENTOS = [], evLoaded = false, calYear = 0, calMonth = 0;
+const EV_TIPOS = [
+  ["tarea",       "Tarea",            "#235347"],
+  ["vencimiento", "Vencimiento",      "#B4453C"],
+  ["turno",       "Turno de atención","#2E7D5B"],
+  ["clase",       "Clase / curso",    "#7A5AA6"],
+  ["reunion",     "Reunión",          "#C77C2E"],
+  ["otro",        "Otro",             "#5E7A70"]
+];
+function evColor(t) { const f = EV_TIPOS.find(x => x[0] === t); return f ? f[2] : "#5E7A70"; }
+function evTipoLbl(t) { const f = EV_TIPOS.find(x => x[0] === t); return f ? f[1] : "Otro"; }
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+async function evLoad() {
+  try {
+    const snap = await getDocs(collection(db, "eventos"));
+    EVENTOS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    EVENTOS.sort((a, b) => (a.fechaISO + (a.hora || "")).localeCompare(b.fechaISO + (b.hora || "")));
+    evLoaded = true;
+  } catch (e) { EVENTOS = []; }
+}
+function todayISO() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+function isoOf(y, m, d) { return y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0"); }
+
+async function renderCalendario() {
+  el("v-calendario").innerHTML = `<h1>Calendario</h1><p class="lead"><span class="cx-spin"></span> Cargando agenda…</p>`;
+  await evLoad();
+  if (!calYear) { const d = new Date(); calYear = d.getFullYear(); calMonth = d.getMonth(); }
+  paintCalendario();
+}
+
+function paintCalendario() {
+  const canEdit = canEditClientes() || true; // todo el equipo activo puede agendar
+  const first = new Date(calYear, calMonth, 1);
+  let startDow = (first.getDay() + 6) % 7; // lunes = 0
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const today = todayISO();
+
+  const leyenda = EV_TIPOS.map(([k, l, c]) => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:12px;color:var(--muted)"><span style="width:10px;height:10px;border-radius:3px;background:${c};display:inline-block"></span>${l}</span>`).join("");
+
+  let cells = "";
+  for (let i = 0; i < startDow; i++) cells += `<div class="cal-cell cal-empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = isoOf(calYear, calMonth, d);
+    const evs = EVENTOS.filter(e => e.fechaISO === iso);
+    const isToday = iso === today;
+    const chips = evs.slice(0, 3).map(e => `<div class="cal-chip" title="${escape((e.hora ? e.hora + ' · ' : '') + (e.titulo || ''))}" style="border-left:3px solid ${evColor(e.tipo)};${e.done ? 'opacity:.5;text-decoration:line-through' : ''}">${e.hora ? `<b>${escape(e.hora)}</b> ` : ''}${escape(e.titulo || '')}</div>`).join("");
+    const more = evs.length > 3 ? `<div class="cal-more">+${evs.length - 3} más</div>` : "";
+    cells += `<div class="cal-cell${isToday ? ' cal-today' : ''}" data-day="${iso}">
+      <div class="cal-dnum">${d}</div>${chips}${more}</div>`;
+  }
+
+  // Próximos eventos (desde hoy, 40 días)
+  const limit = new Date(); limit.setDate(limit.getDate() + 40); const limitISO = limit.getFullYear() + "-" + String(limit.getMonth() + 1).padStart(2, "0") + "-" + String(limit.getDate()).padStart(2, "0");
+  const prox = EVENTOS.filter(e => e.fechaISO >= today && e.fechaISO <= limitISO).slice(0, 25);
+  const proxRows = prox.map(e => `<div class="ev-row" style="border-left:3px solid ${evColor(e.tipo)}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;color:var(--muted)">${escape(fmtFecha(e.fechaISO))}${e.hora ? ' · ' + escape(e.hora) : ''} · ${escape(evTipoLbl(e.tipo))}</div>
+        <div style="font-weight:600;${e.done ? 'opacity:.5;text-decoration:line-through' : ''}">${escape(e.titulo || '')}</div>
+        ${e.cliente ? `<div style="font-size:12px;color:var(--muted)">${escape(e.cliente)}</div>` : ''}
+        ${e.nota ? `<div style="font-size:12px;color:var(--muted)">${escape(e.nota)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="mini ev-done" data-id="${e.id}" title="Marcar hecho/pendiente">${e.done ? '↺' : '✓'}</button>
+        <button class="mini ev-edit" data-id="${e.id}">Editar</button>
+        <button class="mini ev-del" data-id="${e.id}" title="Eliminar">✕</button>
+      </div>
+    </div>`).join("");
+
+  el("v-calendario").innerHTML = `
+    <style>
+      .cal-head{display:flex;align-items:center;gap:10px;margin:6px 0 10px}
+      .cal-head h2{margin:0;font-size:19px;min-width:190px}
+      .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+      .cal-dow{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:center;padding:4px 0;font-weight:600}
+      .cal-cell{min-height:92px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:5px 5px 4px;cursor:pointer;transition:.12s;overflow:hidden}
+      .cal-cell:hover{border-color:var(--sage);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+      .cal-empty{background:transparent;border:none;cursor:default}
+      .cal-today{outline:2px solid var(--green);outline-offset:-1px}
+      .cal-dnum{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:3px}
+      .cal-today .cal-dnum{color:var(--green)}
+      .cal-chip{font-size:11px;background:var(--panel2);border-radius:5px;padding:2px 5px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+      .cal-more{font-size:10.5px;color:var(--muted);padding-left:3px}
+      .ev-row{display:flex;gap:10px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:7px}
+      @media(max-width:900px){.cal-cell{min-height:70px}}
+    </style>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+      <div><h1 style="margin:0 0 2px">Calendario</h1><p class="lead" style="margin:0">Agenda compartida del equipo: tareas, vencimientos, turnos de atención, clases y reuniones.</p></div>
+      <button class="btn" id="ev_new">+ Nuevo evento</button>
+    </div>
+    <div style="margin:14px 0">${leyenda}</div>
+    <div class="cal-head">
+      <button class="btn sec" id="cal_prev">‹</button>
+      <h2>${MESES[calMonth]} ${calYear}</h2>
+      <button class="btn sec" id="cal_next">›</button>
+      <button class="btn sec" id="cal_today">Hoy</button>
+    </div>
+    <div class="cal-grid">${DIAS.map(d => `<div class="cal-dow">${d}</div>`).join("")}</div>
+    <div class="cal-grid" style="margin-top:6px">${cells}</div>
+    <h2 style="margin:26px 0 10px;font-size:17px">Próximos eventos</h2>
+    ${proxRows || `<p class="note">No hay eventos próximos. Usa "+ Nuevo evento" o toca un día del calendario para agregar uno.</p>`}
+  `;
+
+  el("cal_prev").onclick = () => { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } paintCalendario(); };
+  el("cal_next").onclick = () => { calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; } paintCalendario(); };
+  el("cal_today").onclick = () => { const d = new Date(); calYear = d.getFullYear(); calMonth = d.getMonth(); paintCalendario(); };
+  el("ev_new").onclick = () => openEventoModal(null, today);
+  el("v-calendario").querySelectorAll(".cal-cell[data-day]").forEach(c => c.onclick = () => openEventoModal(null, c.dataset.day));
+  el("v-calendario").querySelectorAll(".ev-edit").forEach(b => b.onclick = () => { const e = EVENTOS.find(x => x.id === b.dataset.id); if (e) openEventoModal(e); });
+  el("v-calendario").querySelectorAll(".ev-del").forEach(b => b.onclick = () => delEvento(b.dataset.id));
+  el("v-calendario").querySelectorAll(".ev-done").forEach(b => b.onclick = async () => {
+    const e = EVENTOS.find(x => x.id === b.dataset.id); if (!e) return;
+    try { await setDoc(doc(db, "eventos", e.id), { done: !e.done }, { merge: true }); e.done = !e.done; paintCalendario(); } catch (err) { alert("No se pudo actualizar."); }
+  });
+}
+
+function openEventoModal(e, fechaDefault) {
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const clientesList = (typeof CLIENTES !== "undefined" && CLIENTES.length) ? CLIENTES.map(c => `<option value="${escape(c.nombre || "")}">`).join("") : "";
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;width:500px;max-width:96vw;max-height:92vh;overflow:auto">
+    <h3 style="margin:0 0 14px">${e ? 'Editar' : 'Nuevo'} evento</h3>
+    <div class="field"><label>Título</label><input id="ev_titulo" value="${e ? escape(e.titulo || '') : ''}" placeholder="Ej. Vencimiento IVA / Turno mañana / Clase de facturación"></div>
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input id="ev_fecha" type="date" value="${e ? escape(e.fechaISO || '') : (fechaDefault || todayISO())}"></div>
+      <div class="field"><label>Hora (opcional)</label><input id="ev_hora" type="time" value="${e ? escape(e.hora || '') : ''}"></div>
+    </div>
+    <div class="field"><label>Tipo</label><select id="ev_tipo">${EV_TIPOS.map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+    <div class="field"><label>Cliente (opcional)</label><input id="ev_cliente" list="ev_clist" value="${e ? escape(e.cliente || '') : ''}" placeholder="Relacionado a un cliente"><datalist id="ev_clist">${clientesList}</datalist></div>
+    <div class="field"><label>Nota (opcional)</label><textarea id="ev_nota" style="min-height:70px">${e ? escape(e.nota || '') : ''}</textarea></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn sec" id="ev_cancel">Cancelar</button>
+      <button class="btn" id="ev_save">Guardar</button>
+    </div><div class="msg" id="ev_mmsg"></div></div>`;
+  document.body.appendChild(bg);
+  bg.querySelector("#ev_tipo").value = e ? (e.tipo || "tarea") : "tarea";
+  const close = () => bg.remove();
+  bg.onclick = ev => { if (ev.target === bg) close(); };
+  bg.querySelector("#ev_cancel").onclick = close;
+  bg.querySelector("#ev_save").onclick = async () => {
+    const titulo = bg.querySelector("#ev_titulo").value.trim();
+    const fecha = bg.querySelector("#ev_fecha").value;
+    const m = bg.querySelector("#ev_mmsg");
+    if (!titulo) { m.className = "msg err"; m.textContent = "Ponle un título al evento."; return; }
+    if (!fecha) { m.className = "msg err"; m.textContent = "Elige una fecha."; return; }
+    const item = {
+      titulo, fechaISO: fecha, hora: bg.querySelector("#ev_hora").value || "",
+      tipo: bg.querySelector("#ev_tipo").value, cliente: bg.querySelector("#ev_cliente").value.trim(),
+      nota: bg.querySelector("#ev_nota").value.trim(), updatedAt: serverTimestamp()
+    };
+    const btn = bg.querySelector("#ev_save"); btn.disabled = true; btn.textContent = "Guardando…";
+    try {
+      if (e && e.id) await setDoc(doc(db, "eventos", e.id), item, { merge: true });
+      else await setDoc(doc(collection(db, "eventos")), { ...item, done: false, createdByUid: ME.uid, createdByNombre: ME.name || ME.email, createdAt: serverTimestamp() });
+      await evLoad(); close(); paintCalendario();
+    } catch (err) { btn.disabled = false; btn.textContent = "Guardar"; m.className = "msg err"; m.textContent = "Error: " + (err.code || err.message); }
+  };
+}
+function delEvento(id) {
+  const e = EVENTOS.find(x => x.id === id); if (!e) return;
+  if (!confirm(`¿Eliminar el evento "${e.titulo}"?`)) return;
+  deleteDoc(doc(db, "eventos", id)).then(async () => { await evLoad(); paintCalendario(); }).catch(() => alert("No se pudo eliminar."));
+}
+
+
+// ============================================================
+//  MÓDULO ARQUEO (Operaciones) — conciliación de extracto bancario
+//  Compara los movimientos del banco con los pagos registrados
+//  en Recepción (colección "recepciones") por nombre, fecha e importe.
+// ============================================================
+let ARQ_ROWS = [], ARQ_HEADERS = [], ARQ_MAP = { fecha: -1, desc: -1, importe: -1 }, ARQ_RESULT = [];
+
+function arqNorm(s) {
+  return String(s == null ? "" : s).toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+// Parsea importes en varios formatos: "1.234,56" / "1,234.56" / "1234.56" / "Bs 150,00"
+function arqNum(v) {
+  if (v == null) return NaN;
+  let s = String(v).replace(/[^0-9.,-]/g, "").trim();
+  if (!s) return NaN;
+  const lastC = s.lastIndexOf(","), lastD = s.lastIndexOf(".");
+  if (lastC > -1 && lastD > -1) {
+    if (lastC > lastD) { s = s.replace(/\./g, "").replace(",", "."); }  // 1.234,56
+    else { s = s.replace(/,/g, ""); }                                    // 1,234.56
+  } else if (lastC > -1) {
+    // solo comas: si hay 2 decimales tras la última coma => decimal
+    s = (s.length - lastC - 1 === 2) ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else if (lastD > -1) {
+    // solo puntos (formato boliviano): 3 dígitos tras el último punto => separador de miles
+    if (s.length - lastD - 1 === 3) s = s.replace(/\./g, "");
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+}
+// Normaliza fechas a YYYY-MM-DD desde dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd, etc.
+function arqDate(v) {
+  if (v == null) return "";
+  let s = String(v).trim();
+  let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (m) return m[1] + "-" + m[2].padStart(2, "0") + "-" + m[3].padStart(2, "0");
+  m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+  if (m) { let y = m[3]; if (y.length === 2) y = "20" + y; return y + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"); }
+  return "";
+}
+function arqDaysDiff(a, b) {
+  if (!a || !b) return 999;
+  const da = new Date(a + "T00:00:00"), db = new Date(b + "T00:00:00");
+  return Math.abs(Math.round((da - db) / 86400000));
+}
+// Parser CSV simple (comas o ; con comillas)
+function arqParseCSV(text) {
+  const delim = (text.split("\n")[0].split(";").length > text.split("\n")[0].split(",").length) ? ";" : ",";
+  const rows = [];
+  let row = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else {
+      if (c === '"') q = true;
+      else if (c === delim) { row.push(cur); cur = ""; }
+      else if (c === "\n") { row.push(cur); rows.push(row); row = []; cur = ""; }
+      else if (c === "\r") { }
+      else cur += c;
+    }
+  }
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(c => String(c).trim() !== ""));
+}
+// Carga SheetJS para leer .xlsx (bajo demanda)
+let _xlsxLib = null;
+async function arqLoadXLSX() {
+  if (_xlsxLib) return _xlsxLib;
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+  _xlsxLib = window.XLSX;
+  return _xlsxLib;
+}
+
+async function renderArqueo() {
+  el("v-arqueo").innerHTML = `
+    <h1>Arqueo / Conciliación bancaria</h1>
+    <p class="lead">Carga el extracto del banco y el sistema lo cruza con los pagos registrados en <b>Recepción</b> por nombre de cliente, fecha e importe.</p>
+    <div class="formcard" style="margin-top:14px">
+      <h3 style="margin:0 0 6px">1) Cargar extracto bancario</h3>
+      <p class="note" style="margin:0 0 12px">Acepta archivos <b>.csv</b> o <b>.xlsx</b> exportados desde tu banca por internet.
+      La primera fila debe tener los títulos de columna (Fecha, Descripción/Glosa, Importe/Crédito).</p>
+      <input type="file" id="arq_file" accept=".csv,.xlsx,.xls" style="margin-bottom:8px">
+      <div class="msg" id="arq_msg"></div>
+    </div>
+    <div id="arq_cfg"></div>
+    <div id="arq_out"></div>`;
+  el("arq_file").onchange = arqOnFile;
+  // si ya había un resultado en memoria, re-pintar
+  if (ARQ_ROWS.length) { arqRenderMap(); if (ARQ_RESULT.length) arqRenderResult(); }
+}
+
+async function arqOnFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const msg = el("arq_msg"); msg.className = "msg"; msg.textContent = "Leyendo archivo…";
+  try {
+    let rows;
+    if (/\.(xlsx|xls)$/i.test(file.name)) {
+      const XLSX = await arqLoadXLSX();
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+    } else {
+      const text = await file.text();
+      rows = arqParseCSV(text);
+    }
+    rows = rows.filter(r => r && r.some(c => String(c).trim() !== ""));
+    if (rows.length < 2) { msg.className = "msg err"; msg.textContent = "El archivo no tiene filas suficientes."; return; }
+    ARQ_HEADERS = rows[0].map(h => String(h).trim());
+    ARQ_ROWS = rows.slice(1);
+    ARQ_RESULT = [];
+    // intento de auto-detección de columnas
+    ARQ_MAP = { fecha: -1, desc: -1, importe: -1 };
+    ARQ_HEADERS.forEach((h, i) => {
+      const n = arqNorm(h);
+      if (ARQ_MAP.fecha < 0 && /fecha|date|dia/.test(n)) ARQ_MAP.fecha = i;
+      if (ARQ_MAP.desc < 0 && /descrip|glosa|detalle|concepto|referencia|beneficiario|ordenante|nombre/.test(n)) ARQ_MAP.desc = i;
+      if (ARQ_MAP.importe < 0 && /importe|credito|abono|monto|haber|deposito|valor|ingreso/.test(n)) ARQ_MAP.importe = i;
+    });
+    msg.className = "msg ok"; msg.textContent = `✓ ${ARQ_ROWS.length} movimientos leídos. Revisa las columnas abajo.`;
+    arqRenderMap();
+  } catch (err) {
+    msg.className = "msg err"; msg.textContent = "No se pudo leer el archivo: " + (err.message || err);
+  }
+}
+
+function arqRenderMap() {
+  const opts = (sel) => ARQ_HEADERS.map((h, i) => `<option value="${i}" ${i === sel ? "selected" : ""}>${escape(h || ("Columna " + (i + 1)))}</option>`).join("");
+  const sample = ARQ_ROWS.slice(0, 4).map(r => `<tr>${ARQ_HEADERS.map((h, i) => `<td>${escape(String(r[i] == null ? "" : r[i]))}</td>`).join("")}</tr>`).join("");
+  el("arq_cfg").innerHTML = `
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">2) Indica qué columna es cada dato</h3>
+      <div class="grid2" style="gap:14px">
+        <div class="field"><label>Fecha</label><select id="arq_c_fecha"><option value="-1">—</option>${opts(ARQ_MAP.fecha)}</select></div>
+        <div class="field"><label>Descripción / Glosa (nombre del cliente)</label><select id="arq_c_desc"><option value="-1">—</option>${opts(ARQ_MAP.desc)}</select></div>
+      </div>
+      <div class="grid2" style="gap:14px">
+        <div class="field"><label>Importe (crédito / abono)</label><select id="arq_c_importe"><option value="-1">—</option>${opts(ARQ_MAP.importe)}</select></div>
+        <div class="field"><label>Tolerancia de fecha</label><select id="arq_c_tol"><option value="0">Mismo día</option><option value="2">± 2 días</option><option value="3" selected>± 3 días</option><option value="7">± 7 días</option></select></div>
+      </div>
+      <div style="overflow:auto;margin:8px 0 12px"><table style="font-size:12px"><thead><tr>${ARQ_HEADERS.map(h => `<th>${escape(h)}</th>`).join("")}</tr></thead><tbody>${sample}</tbody></table></div>
+      <button class="btn" id="arq_run">Conciliar con Recepción</button>
+      <div class="msg" id="arq_runmsg"></div>
+    </div>`;
+  el("arq_c_fecha").value = ARQ_MAP.fecha; el("arq_c_desc").value = ARQ_MAP.desc; el("arq_c_importe").value = ARQ_MAP.importe;
+  el("arq_run").onclick = arqRun;
+}
+
+async function arqRun() {
+  ARQ_MAP.fecha = Number(el("arq_c_fecha").value);
+  ARQ_MAP.desc = Number(el("arq_c_desc").value);
+  ARQ_MAP.importe = Number(el("arq_c_importe").value);
+  const tol = Number(el("arq_c_tol").value);
+  const msg = el("arq_runmsg");
+  if (ARQ_MAP.importe < 0) { msg.className = "msg err"; msg.textContent = "Elige al menos la columna de Importe."; return; }
+  msg.className = "msg"; msg.textContent = "Cargando pagos de Recepción…";
+  await recepLoad();
+  // candidatos: pagos aún no conciliados
+  const pagos = RECEP.map(r => ({ ...r, _imp: Number(r.importe) || 0, _nom: arqNorm(r.clienteNombre) }));
+
+  ARQ_RESULT = ARQ_ROWS.map((row, idx) => {
+    const imp = arqNum(row[ARQ_MAP.importe]);
+    const fec = ARQ_MAP.fecha >= 0 ? arqDate(row[ARQ_MAP.fecha]) : "";
+    const desc = ARQ_MAP.desc >= 0 ? String(row[ARQ_MAP.desc] || "") : "";
+    const descN = arqNorm(desc);
+    let matches = [];
+    if (!isNaN(imp) && imp > 0) {
+      pagos.forEach(p => {
+        if (p.conciliado) return;
+        const impOk = Math.abs(p._imp - imp) < 0.5;
+        if (!impOk) return;
+        const dd = fec ? arqDaysDiff(fec, p.fechaISO) : 0;
+        const fecOk = !fec || dd <= tol;
+        // nombre: alguna palabra del nombre (>=4 letras) aparece en la glosa
+        let nomScore = 0;
+        if (p._nom) {
+          const words = p._nom.split(" ").filter(w => w.length >= 4);
+          nomScore = words.filter(w => descN.includes(w)).length;
+        }
+        if (impOk && fecOk) {
+          let score = 2 + (fec ? (tol - dd) : 0) + nomScore * 3;
+          matches.push({ p, score, nomScore, dd });
+        }
+      });
+      matches.sort((a, b) => b.score - a.score);
+    }
+    let estado = "sin", best = null;
+    if (matches.length === 1) { estado = "ok"; best = matches[0]; }
+    else if (matches.length > 1) {
+      // si el mejor tiene coincidencia de nombre y es único en ese puntaje, lo tomamos
+      if (matches[0].nomScore > 0 && matches[0].score > matches[1].score) { estado = "ok"; best = matches[0]; }
+      else estado = "multi";
+    }
+    return { idx, imp, fec, desc, matches, estado, best, chosen: best ? best.p.id : "" };
+  });
+
+  const ok = ARQ_RESULT.filter(r => r.estado === "ok").length;
+  const multi = ARQ_RESULT.filter(r => r.estado === "multi").length;
+  const sin = ARQ_RESULT.filter(r => r.estado === "sin").length;
+  msg.className = "msg ok"; msg.textContent = `✓ Conciliado: ${ok} · Varias opciones: ${multi} · Sin coincidencia: ${sin}`;
+  arqRenderResult();
+}
+
+function arqRenderResult() {
+  const canEdit = canEditClientes();
+  const badge = { ok: '<span class="badge ok">Conciliado</span>', multi: '<span class="badge" style="background:#C77C2E;color:#fff">Varias opciones</span>', sin: '<span class="badge off">Sin coincidencia</span>' };
+  const rows = ARQ_RESULT.map(r => {
+    const pagosSel = RECEP.filter(p => Math.abs((Number(p.importe) || 0) - r.imp) < 50 || r.matches.some(m => m.p.id === p.id));
+    const sel = canEdit ? `<select class="mini" data-arqsel="${r.idx}">
+        <option value="">— sin asignar —</option>
+        ${pagosSel.map(p => `<option value="${p.id}" ${r.chosen === p.id ? "selected" : ""}>${escape(p.clienteNombre || "?")} · ${money(p.importe)} · ${escape(fmtFecha(p.fechaISO))}</option>`).join("")}
+      </select>` : (r.best ? escape(r.best.p.clienteNombre || "") : "—");
+    return `<tr>
+      <td class="mono">${escape(r.fec || "—")}</td>
+      <td style="max-width:260px">${escape(r.desc || "—")}</td>
+      <td class="mono" style="text-align:right">${isNaN(r.imp) ? "—" : money(r.imp)}</td>
+      <td>${badge[r.estado]}</td>
+      <td>${sel}</td>
+      <td>${canEdit ? `<button class="mini" data-arqok="${r.idx}" ${r.chosen ? "" : "disabled"}>Marcar conciliado</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+  el("arq_out").innerHTML = `
+    <div class="formcard">
+      <h3 style="margin:0 0 6px">3) Resultado de la conciliación</h3>
+      <p class="note" style="margin:0 0 10px">Revisa cada movimiento. Donde haya varias opciones, elige el pago correcto y pulsa <b>Marcar conciliado</b>. Esto marca el pago en Recepción como conciliado con el banco.</p>
+      <div style="overflow:auto"><table>
+        <thead><tr><th>Fecha banco</th><th>Descripción / Glosa</th><th style="text-align:right">Importe</th><th>Estado</th><th>Pago de Recepción</th><th></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="6" style="color:var(--muted)">Sin movimientos.</td></tr>`}</tbody>
+      </table></div>
+    </div>`;
+  el("arq_out").querySelectorAll("[data-arqsel]").forEach(s => s.onchange = () => {
+    const r = ARQ_RESULT[Number(s.dataset.arqsel)]; if (r) { r.chosen = s.value; const b = el("arq_out").querySelector(`[data-arqok="${r.idx}"]`); if (b) b.disabled = !s.value; }
+  });
+  el("arq_out").querySelectorAll("[data-arqok]").forEach(b => b.onclick = async () => {
+    const r = ARQ_RESULT[Number(b.dataset.arqok)]; if (!r || !r.chosen) return;
+    b.disabled = true; b.textContent = "Guardando…";
+    try {
+      await setDoc(doc(db, "recepciones", r.chosen), { conciliado: true, conciliadoFechaBanco: r.fec || "", conciliadoGlosa: r.desc || "", conciliadoPorUid: ME.uid, conciliadoAt: serverTimestamp() }, { merge: true });
+      const p = RECEP.find(x => x.id === r.chosen); if (p) p.conciliado = true;
+      r.estado = "ok"; b.textContent = "✓ Conciliado"; b.classList.add("ok");
+    } catch (e) { b.disabled = false; b.textContent = "Marcar conciliado"; alert("No se pudo guardar: " + (e.code || e.message)); }
+  });
+}
+
 
 function escape(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }

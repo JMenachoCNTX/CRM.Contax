@@ -1,0 +1,81 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL  ·  Versión v6
+===============================================================
+
+NUEVO EN ESTA VERSIÓN (v6)
+--------------------------
+Se agregó la pestaña "Arqueo" (conciliación bancaria) en el grupo
+"Operaciones". Con esto cierras el ciclo: Recepción registra los pagos
+y Arqueo los cruza contra el extracto del banco.
+
+CÓMO FUNCIONA:
+ 1) Cargar extracto: sube el archivo del banco en .csv o .xlsx
+    (exportado desde tu banca por internet). La primera fila debe
+    tener los títulos de columna.
+ 2) Indicar columnas: el sistema intenta detectar solas las columnas
+    de Fecha, Descripción/Glosa e Importe; si no, las eliges tú con
+    los menús. También eliges la tolerancia de fecha (± días).
+ 3) Conciliar: cruza cada movimiento del banco con los pagos de
+    Recepción por IMPORTE (igual), FECHA (dentro de la tolerancia) y
+    NOMBRE del cliente (si aparece en la glosa). Marca cada fila como:
+       • Conciliado        → coincidencia única y clara
+       • Varias opciones   → elige el pago correcto en el menú
+       • Sin coincidencia  → no se encontró pago para ese movimiento
+ 4) Marcar conciliado: deja registrado en Recepción que ese pago ya
+    fue verificado contra el banco (campo "conciliado").
+
+ • Lee importes en formatos bolivianos e internacionales
+   (1.500,00 / 1,500.00 / 150,00 / Bs 150).
+ • Lee fechas dd/mm/aaaa, aaaa-mm-dd, etc.
+ • El soporte de .xlsx se carga automáticamente al subir el archivo
+   (requiere conexión a internet la primera vez).
+
+
+ARCHIVOS DE ESTE PAQUETE
+------------------------
+ - index.html        (Panel v6 — SÚBELO a GitHub)
+ - app.js            (lógica v6 — SÚBELO a GitHub)
+ - config.js         (config v6 — SÚBELO a GitHub)
+ - LEEME-v6.txt       (este archivo)
+
+
+CÓMO ACTUALIZAR EL PANEL (GitHub)
+---------------------------------
+Reemplaza en tu repositorio JMenachoCNTX/CRM.Contax los 3 archivos:
+index.html, app.js y config.js. En 1–2 minutos queda actualizado en:
+  https://jmenachocntx.github.io/CRM.Contax/
+
+
+===============================================================
+ REGLAS DE FIRESTORE (recordatorio)
+===============================================================
+Arqueo NO usa colección nueva: solo agrega el campo "conciliado" a
+los documentos de "recepciones" que ya existe, así que la regla de
+"recepciones" ya lo cubre. No hay reglas nuevas en v6.
+
+Las colecciones nuevas de las versiones anteriores siguen pendientes
+de confirmar en Firebase → Firestore Database → Reglas:
+
+    match /tarifas/{id} {
+      allow read:   if isSignedIn() && active();
+      allow create, update, delete: if isSup();
+    }
+    match /recepciones/{id} {
+      allow read:   if isSignedIn() && active();
+      allow create: if isSignedIn() && active();
+      allow update, delete: if isSup();
+    }
+    match /eventos/{id} {
+      allow read, create, update, delete: if isSignedIn() && active();
+    }
+
+OJO: en Arqueo, el botón "Marcar conciliado" hace un update sobre
+"recepciones". Con la regla de arriba eso lo pueden hacer supervisor
+y admin (isSup). Si quieres que cualquier agente también pueda
+conciliar, cambia la línea de recepciones a:
+      allow update: if isSignedIn() && active();
+      allow delete: if isSup();
+
+Pégame tu firestore-rules.txt actual y te lo devuelvo completo ya con
+los tres bloques integrados.
+===============================================================
