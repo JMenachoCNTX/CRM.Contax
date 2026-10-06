@@ -1,0 +1,61 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v18
+ Recepción: detalle por servicio, nuevo período, comprobante IA,
+ formulario en columnas y nueva Lista de Facturación
+===============================================================
+
+1) EL DETALLE DE SERVICIO AHORA DEPENDE DEL SERVICIO
+   Al elegir el Servicio, el "Detalle de servicio" muestra SOLO lo que
+   corresponde a esa categoría:
+     • Declaración → DDJJ sin movimiento, con crédito fiscal, electrónicas,
+       manuales, mixtas, Form 110 RC-IVA…
+     • Trámites → matrículas, ROE, actualizaciones SEPREC…
+     • Balance → balance de apertura/general/cierre, inicio de servicios…
+     • Facturación → emisión/verificación de facturas.
+   Puedes editar cada lista por separado en Configuración → Recepción
+   ("Detalle — Declaraciones / Trámites / Balances / Facturación").
+
+2) NUEVO "MES / PERÍODO A RECEPCIONAR" (adiós a "MARZO./26")
+   El período se adapta al servicio:
+     • Declaración → Mes + Año a DECLARAR. Por defecto el mes anterior
+       (ej.: si registras en octubre, propone Septiembre, porque en
+       octubre se declara septiembre).
+     • Facturación → Mes + Año a FACTURAR. Por defecto el mes actual.
+     • Balance → Gestión (año). Por defecto el año anterior (ej.: en 2026
+       se recepciona el balance de la gestión 2025).
+     • Trámites → no pide período (no aplica).
+   Se guarda en texto claro: "Septiembre 2026", "Gestión 2025", etc.
+   El "Mes de pago" se calcula solo a partir de la Fecha de pago real.
+
+   NOTA IMPORTANTE para Suscripciones: el control de suscripciones ahora
+   calcula el mes cubierto por la FECHA DE PAGO (pago del 25 al 30 = cubre
+   el mes siguiente), no por el período declarado. Así el pago anticipado
+   de fin de mes cuenta para el mes siguiente, como corresponde.
+
+3) COMPROBANTE CON IA EN RECEPCIÓN (igual que en el CRM)
+   En el formulario hay un bloque "📷 Comprobante": tomas/subes la foto o
+   la PEGAS con Ctrl+V, tocas "🤖 Leer con IA" y Gemini llena el Total, el
+   Banco, el N° de operación y el Depositante. Usa la misma clave de
+   Gemini para comprobantes (Configuración → IA).
+
+4) FORMULARIO EN COLUMNAS
+   El formulario de Recepción ahora se ve en columnas (Cliente · Servicio
+   · Pago · Comprobante), aprovechando el ancho de la pantalla, sin tener
+   que hacer scroll largo. (El PDF/Orden de Recepción no se tocó.)
+
+5) NUEVA LISTA DE FACTURACIÓN
+   En el apartado LISTAS hay una nueva pestaña "Facturación": igual que
+   Declaraciones/Trámites/EEFF, te muestra el historial de clientes a los
+   que hay que emitir facturas, con su estado (pendiente/en proceso/
+   entregado). Se llena automáticamente con las recepciones de servicio
+   de Facturación.
+
+PRÓXIMO: Calendario conectado con Google Calendar (pendiente; requiere
+crear una credencial gratis en Google Cloud — te paso los pasos).
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v18 (súbelo a GitHub)
+ - LEEME-v18.txt
+Sin cambios en las reglas de Firestore.
+===============================================================

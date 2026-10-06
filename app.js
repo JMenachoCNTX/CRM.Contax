@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "17";
+const APP_VERSION = "18";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -59,7 +59,7 @@ el("agentLogout").onclick = () =>signOut(auth);
 const NAV_SECTIONS = [
   { key: "portal",   label: "PORTAL",          views: ["inicio", "dashboard", "basedatos", "tarifas", "calendario"] },
   { key: "finanzas", label: "FINANZAS",        views: ["recepcion", "arqueo", "egresos"] },
-  { key: "listas",   label: "LISTAS",          views: ["declaraciones", "tramites", "eeff"] },
+  { key: "listas",   label: "LISTAS",          views: ["declaraciones", "tramites", "eeff", "facturacion"] },
   { key: "crm",      label: "CRM",             views: ["bandeja", "respuestas"] },
   { key: "reportes", label: "REPORTES",        views: ["presence", "historial", "reports"] },
   { key: "admin",    label: "ADMINISTRACIÓN",  views: ["asistente", "config", "users", "importar"] }
@@ -67,7 +67,7 @@ const NAV_SECTIONS = [
 const VIEW_LABELS = {
   inicio: "Inicio", dashboard: "Dashboard", basedatos: "Clientes", tarifas: "Tarifas y Suscripciones", calendario: "Calendario",
   recepcion: "Recepción", arqueo: "Arqueo", egresos: "Egresos",
-  declaraciones: "Declaraciones", tramites: "Trámites", eeff: "Estados Fin. (EEFF)",
+  declaraciones: "Declaraciones", tramites: "Trámites", eeff: "Estados Fin. (EEFF)", facturacion: "Facturación",
   bandeja: "Bandeja", respuestas: "Respuestas",
   presence: "Presencia", historial: "Historial", reports: "Reportes",
   asistente: "Asistente IA", config: "Configuración", users: "Usuarios", importar: "Importar"
@@ -79,9 +79,9 @@ const ROLE_LABELS = { admin: "Admin", supervisor: "Supervisor", editor: "Editor"
 const DEFAULT_ROLE_VIEWS = {
   admin: ALL_VIEWS.slice(),
   supervisor: ALL_VIEWS.slice(),
-  editor: ["inicio", "basedatos", "tarifas", "calendario", "declaraciones", "tramites", "eeff", "asistente"],
+  editor: ["inicio", "basedatos", "tarifas", "calendario", "declaraciones", "tramites", "eeff", "facturacion", "asistente"],
   cajero: ["inicio", "basedatos", "recepcion", "arqueo", "egresos", "calendario", "asistente"],
-  lector: ["inicio", "dashboard", "basedatos", "tarifas", "calendario", "declaraciones", "tramites", "eeff", "presence", "historial", "reports"]
+  lector: ["inicio", "dashboard", "basedatos", "tarifas", "calendario", "declaraciones", "tramites", "eeff", "facturacion", "presence", "historial", "reports"]
 };
 let ROLE_VIEWS = null; // se carga de config/app.rolePerms; si no, usa los defaults
 function roleViewsFor(role) {
@@ -173,6 +173,7 @@ function switchView(v, btn) {
   if (v === "declaraciones") renderLista("declaracion", "v-declaraciones", "Declaraciones");
   if (v === "tramites") renderLista("tramite", "v-tramites", "Trámites");
   if (v === "eeff") renderLista("eeff", "v-eeff", "Estados Financieros (EEFF)");
+  if (v === "facturacion") renderLista("facturacion", "v-facturacion", "Facturación");
   if (v === "calendario") renderCalendario();
   if (v === "arqueo") renderArqueo();
   if (v === "egresos") renderEgresos();
@@ -751,10 +752,13 @@ async function renderConfig() {
     </div>
     <div class="formcard">
       <h3 style="margin:0 0 6px">Recepción — Listas desplegables</h3>
-      <p class="note" style="margin:0 0 12px">Un valor por línea. Estas listas aparecen en Recepción y Egresos. Si dejas una vacía, se usan los valores por defecto.</p>
+      <p class="note" style="margin:0 0 12px">Un valor por línea. Estas listas aparecen en Recepción y Egresos. Si dejas una vacía, se usan los valores por defecto. El <b>Detalle de servicio</b> ahora está separado por categoría: en Recepción se muestra solo el detalle que corresponde al servicio elegido.</p>
+      <div class="field"><label>Servicios (SERVICIOS CONTAX)</label><textarea id="c_l_servicios" style="min-height:90px">${escape((recListas(cfg).servicios).join("\n"))}</textarea></div>
       <div class="grid2">
-        <div class="field"><label>Servicios (SERVICIOS CONTAX)</label><textarea id="c_l_servicios" style="min-height:120px">${escape((recListas(cfg).servicios).join("\n"))}</textarea></div>
-        <div class="field"><label>Detalle de servicio (Tipo)</label><textarea id="c_l_detalles" style="min-height:120px">${escape((recListas(cfg).detalles).join("\n"))}</textarea></div>
+        <div class="field"><label>Detalle — Declaraciones</label><textarea id="c_l_detdecl" style="min-height:110px">${escape((recListas(cfg).detallesDeclaracion).join("\n"))}</textarea></div>
+        <div class="field"><label>Detalle — Trámites</label><textarea id="c_l_dettram" style="min-height:110px">${escape((recListas(cfg).detallesTramite).join("\n"))}</textarea></div>
+        <div class="field"><label>Detalle — Balances (EEFF)</label><textarea id="c_l_detbal" style="min-height:110px">${escape((recListas(cfg).detallesBalance).join("\n"))}</textarea></div>
+        <div class="field"><label>Detalle — Facturación</label><textarea id="c_l_detfact" style="min-height:110px">${escape((recListas(cfg).detallesFacturacion).join("\n"))}</textarea></div>
       </div>
       <div class="grid3">
         <div class="field"><label>Formas de pago</label><textarea id="c_l_pagos" style="min-height:90px">${escape((recListas(cfg).pagos).join("\n"))}</textarea></div>
@@ -836,8 +840,13 @@ Contacto: …">${escape(cfg.aiContext || "")}</textarea>
   };
   el("c_listsave").onclick = async () => {
     const msg = el("c_listmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
-    const toArr = id => el(id).value.split("\n").map(s => s.trim()).filter(Boolean);
-    const recListasVal = { servicios: toArr("c_l_servicios"), detalles: toArr("c_l_detalles"), pagos: toArr("c_l_pagos"), atencion: toArr("c_l_atencion"), cuentas: toArr("c_l_cuentas") };
+    const toArr = id => (el(id) ? el(id).value : "").split("\n").map(s => s.trim()).filter(Boolean);
+    const recListasVal = {
+      servicios: toArr("c_l_servicios"),
+      detallesDeclaracion: toArr("c_l_detdecl"), detallesTramite: toArr("c_l_dettram"),
+      detallesBalance: toArr("c_l_detbal"), detallesFacturacion: toArr("c_l_detfact"),
+      pagos: toArr("c_l_pagos"), atencion: toArr("c_l_atencion"), cuentas: toArr("c_l_cuentas")
+    };
     try { await setDoc(doc(db, "config", "app"), { recListas: recListasVal, updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Listas guardadas. Ya aparecen en Recepción y Egresos."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
@@ -1841,6 +1850,16 @@ function suscPlanFromImporte(imp, servicio) {
 function suscEsRepartidor(txt) { const s = suscNorm(txt); return SUSC_FLOTAS.some(f => s.indexOf(f) >= 0); }
 // Etiqueta de mes como la usa la recepción: "OCTUBRE./26"
 function suscMesLabel(idx, anio) { return REC_MESES[idx] + "./" + String(anio).slice(2); }
+// Ciclo de suscripción que cubre un pago: por fecha de pago (día 25-30 → mes siguiente).
+// Si no hay fecha de pago, usa la fecha de registro (fechaISO).
+function suscCicloDe(rec) {
+  const f = (rec.fechaPago && /^\d{4}-\d{2}-\d{2}/.test(rec.fechaPago)) ? rec.fechaPago : (rec.fechaISO || "");
+  const d = new Date(f.length > 10 ? f : (f + "T00:00:00"));
+  if (isNaN(d)) return null;
+  let mes = d.getMonth(), anio = d.getFullYear();
+  if (d.getDate() >= 25) { mes += 1; if (mes > 11) { mes = 0; anio += 1; } }
+  return { mes, anio };
+}
 function suscKeyDe(r) { return (r.clienteId || r.codigoId || r.nit || r.clienteNombre || "").toString().trim().toUpperCase(); }
 function suscTelLimpio(t) { let d = String(t || "").replace(/\D/g, ""); if (d.length >= 8 && d.indexOf("591") !== 0 && d.length <= 9) d = "591" + d; return d; }
 
@@ -1876,15 +1895,14 @@ function suscBuild(overrides) {
     }
   });
   // Determina plan, estado del mes objetivo y aplica overrides
-  const target = suscMesLabel(suscMesIdx, suscAnio);
   const list = [];
   Object.keys(map).forEach(key => {
     const m = map[key];
     const ov = overrides[key] || {};
     if (ov.excluir) return;
     m.plan = ov.plan || m.declPlan || (m.pagos.some(p => /FACTURAC/.test(suscNorm(p.servicio))) ? "facturacion" : "otro");
-    // ¿pagó el mes objetivo?
-    const pagoMes = m.pagos.find(p => suscNorm(p.mesRecepcion) === suscNorm(target) || suscNorm(p.mesPago) === suscNorm(target));
+    // ¿pagó el ciclo del mes objetivo? (ciclo por fecha de pago: 25-30 = mes siguiente)
+    const pagoMes = m.pagos.find(p => { const c = suscCicloDe(p); return c && c.mes === suscMesIdx && c.anio === suscAnio; });
     m.alDia = !!pagoMes;
     m.pagoMes = pagoMes || null;
     m.importeMes = pagoMes ? (Number(pagoMes.importe) || 0) : 0;
@@ -2180,12 +2198,33 @@ function mesKey(iso) { return (iso || "").slice(0, 7); }
 async function recibosUrlGet() { const cfg = await loadConfigDoc(); return (cfg.recibosUrl || "").trim(); }
 // ===== Listas configurables de Recepción (con valores semilla) =====
 const REC_SEED = {
-  servicios: ["DECLARACIÓN MENSUAL", "TRÁMITES", "BALANCE", "DECLARACIÓN MENSUAL 2024", "FACTURACIÓN YANGO", "SERVICIOS MTG - YANGO", "Servicios de Emisión de Facturas, Verificaciones de Documentos"],
-  detalles: ["DDJJ - Sin Movimiento", "DDJJ - Con Su Crédito Fiscal Anterior", "DDJJ - Facturas ELECTRÓNICAS", "DDJJ - Facturas MANUALES", "DDJJ - Facturas MIXTAS (Electrónicas y Manuales)", "FORM 110 - RC IVA (Dependientes)", "TRÁMITES RIDERS (Matrícula - ROE)", "TRÁMITE MATRÍCULA (APERTURA)", "TRÁMITE MATRÍCULA (CIERRE)", "TRÁMITE ROE", "TRÁMITE ACTUALIZACION DE ACTIVIDADES ECONOMICAS", "TRÁMITE ACTUALIZACIÓN SEPREC", "BALANCE DE APERTURA", "BALANCE GENERAL", "BALANCE DE CIERRE", "INICIO DE SERVICIOS CONTABLES"],
+  servicios: ["DECLARACIÓN MENSUAL", "TRÁMITES", "BALANCE", "FACTURACIÓN", "FACTURACIÓN YANGO", "SERVICIOS MTG - YANGO", "Servicios de Emisión de Facturas, Verificaciones de Documentos"],
+  // Detalle de servicio AGRUPADO por categoría (se muestra según el servicio elegido)
+  detallesDeclaracion: ["DDJJ - Sin Movimiento", "DDJJ - Con Su Crédito Fiscal Anterior", "DDJJ - Facturas ELECTRÓNICAS", "DDJJ - Facturas MANUALES", "DDJJ - Facturas MIXTAS (Electrónicas y Manuales)", "FORM 110 - RC IVA (Dependientes)"],
+  detallesTramite: ["TRÁMITES RIDERS (Matrícula - ROE)", "TRÁMITE MATRÍCULA (APERTURA)", "TRÁMITE MATRÍCULA (CIERRE)", "TRÁMITE ROE", "TRÁMITE ACTUALIZACION DE ACTIVIDADES ECONOMICAS", "TRÁMITE ACTUALIZACIÓN SEPREC"],
+  detallesBalance: ["BALANCE DE APERTURA", "BALANCE GENERAL", "BALANCE DE CIERRE", "INICIO DE SERVICIOS CONTABLES"],
+  detallesFacturacion: ["EMISIÓN DE FACTURAS (mes completo)", "EMISIÓN PUNTUAL DE FACTURA", "VERIFICACIÓN DE FACTURAS"],
+  detalles: [], // general / otros (fallback)
   pagos: ["EFECTIVO", "TRANSFERENCIA", "DEUDOR"],
   atencion: ["AILYN", "SOLEDAD", "JHONNY", "KEVIN"],
   cuentas: ["ALQUILER", "AGUA", "LUZ", "INTERNET", "SUELDOS", "LINEA CORPORATIVA", "IMPUESTOS", "INTERESES"]
 };
+// Categoría de un servicio (para filtrar el detalle y clasificar la lista de trabajo)
+function recCategoria(servicio, detalle) {
+  const s = ((servicio || "") + " " + (detalle || "")).toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/FACTURAC/.test(s)) return "facturacion";
+  if (/BALANCE|EEFF|ESTADO FINANC|SERVICIOS CONTABLES/.test(s)) return "eeff";
+  if (/TRAMITE|MATRICULA|ROE|SEPREC|ACTUALIZ/.test(s)) return "tramite";
+  if (/DECLARAC|MENSUAL|DDJJ|FORM 110|RC IVA/.test(s)) return "declaracion";
+  return "otro";
+}
+// Detalles disponibles para una categoría (de la config o de las semillas)
+function recDetallesPorCat(cat, L) {
+  const map = { declaracion: "detallesDeclaracion", tramite: "detallesTramite", eeff: "detallesBalance", facturacion: "detallesFacturacion" };
+  const key = map[cat];
+  const arr = (key && L[key] && L[key].length) ? L[key] : (key ? REC_SEED[key] : []);
+  return (arr || []).concat((L.detalles && L.detalles.length) ? L.detalles : []);
+}
 const REC_MESES = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 function recMesesOpts() {
   const out = []; const y2 = new Date().getFullYear() + 1;
@@ -2195,7 +2234,13 @@ function recMesesOpts() {
 function recListas(cfg) {
   const L = (cfg && cfg.recListas) || {};
   const pick = (k) => (Array.isArray(L[k]) && L[k].length) ? L[k] : REC_SEED[k];
-  return { servicios: pick("servicios"), detalles: pick("detalles"), pagos: pick("pagos"), atencion: pick("atencion"), cuentas: pick("cuentas") };
+  const pickRaw = (k) => Array.isArray(L[k]) ? L[k] : (REC_SEED[k] || []);
+  return {
+    servicios: pick("servicios"), detalles: pickRaw("detalles"),
+    detallesDeclaracion: pick("detallesDeclaracion"), detallesTramite: pick("detallesTramite"),
+    detallesBalance: pick("detallesBalance"), detallesFacturacion: pick("detallesFacturacion"),
+    pagos: pick("pagos"), atencion: pick("atencion"), cuentas: pick("cuentas")
+  };
 }
 // Numeración automática continua (lee config, usa el número y guarda el siguiente)
 async function recNextNum(field, fallback) {
@@ -2204,13 +2249,58 @@ async function recNextNum(field, fallback) {
   try { await setDoc(doc(db, "config", "app"), { [field]: n + 1, updatedAt: serverTimestamp() }, { merge: true }); } catch (e) {}
   return n;
 }
-// Clasifica el servicio/detalle en la lista de trabajo (declaración / trámite / EEFF)
+// Clasifica el servicio/detalle en la lista de trabajo (declaración / trámite / EEFF / facturación)
 function recTipoDe(servicio, detalle) {
-  const s = ((servicio || "") + " " + (detalle || "")).toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  if (/BALANCE|EEFF|ESTADO FINANC|SERVICIOS CONTABLES/.test(s)) return "eeff";
-  if (/TRAMITE|MATRICULA|ROE|SEPREC|ACTUALIZ/.test(s)) return "tramite";
-  if (/DDJJ|DECLARAC|FORM 110|RC IVA/.test(s)) return "declaracion";
-  return "";
+  const cat = recCategoria(servicio, detalle);
+  return cat === "otro" ? "" : cat;
+}
+// Meses y opciones para el período
+const REC_MESES_CAP = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+function recMesOptions(selIdx) {
+  return REC_MESES_CAP.map((m, i) => `<option value="${i}" ${i === selIdx ? "selected" : ""}>${m}</option>`).join("");
+}
+function recAnioOptions(sel) {
+  const y = new Date().getFullYear(); let o = "";
+  for (let a = y + 1; a >= 2022; a--) o += `<option value="${a}" ${a === sel ? "selected" : ""}>${a}</option>`;
+  return o;
+}
+// Widget de "período a recepcionar" según la categoría del servicio
+function recPeriodoWidget(cat) {
+  const now = new Date();
+  const m = now.getMonth(), y = now.getFullYear();
+  if (cat === "tramite" || cat === "otro" || !cat) {
+    return `<div class="field" data-percat="${cat || ''}"><label>Período</label><input value="— no aplica para este servicio —" disabled style="color:var(--muted)"><input type="hidden" id="r_pertipo" value="none"></div>`;
+  }
+  if (cat === "eeff") {
+    // Balance = gestión (año), por defecto el año anterior
+    return `<div class="field"><label>Gestión del balance (año)</label>
+      <select id="r_peranio">${recAnioOptions(y - 1)}</select>
+      <input type="hidden" id="r_pertipo" value="gestion"><input type="hidden" id="r_permes" value="">
+      <div class="note" style="margin-top:3px">Ej.: en 2026 se recepciona el balance de la gestión 2025.</div></div>`;
+  }
+  // declaracion → mes anterior ; facturacion → mes actual
+  const defMes = (cat === "declaracion") ? (m === 0 ? 11 : m - 1) : m;
+  const defAnio = (cat === "declaracion" && m === 0) ? (y - 1) : y;
+  const ayuda = (cat === "declaracion")
+    ? "El mes que se va a declarar (ej.: en octubre se declara septiembre)."
+    : "El mes al que corresponde la emisión de facturas (normalmente el mes actual).";
+  return `<div class="field"><label>${cat === "declaracion" ? "Mes a declarar" : "Mes a facturar"}</label>
+    <div style="display:flex;gap:6px"><select id="r_permes" style="flex:1">${recMesOptions(defMes)}</select><select id="r_peranio" style="width:90px">${recAnioOptions(defAnio)}</select></div>
+    <input type="hidden" id="r_pertipo" value="mes">
+    <div class="note" style="margin-top:3px">${ayuda}</div></div>`;
+}
+// Lee el período elegido → { texto, tipo, mes, anio }
+function recLeerPeriodo() {
+  const tipo = (el("r_pertipo") && el("r_pertipo").value) || "none";
+  if (tipo === "none") return { texto: "", tipo: "none", mes: "", anio: "" };
+  if (tipo === "gestion") {
+    const a = (el("r_peranio") && el("r_peranio").value) || "";
+    return { texto: a ? ("Gestión " + a) : "", tipo: "gestion", mes: "", anio: a };
+  }
+  const mi = parseInt((el("r_permes") && el("r_permes").value), 10);
+  const a = (el("r_peranio") && el("r_peranio").value) || "";
+  const texto = (isNaN(mi) ? "" : REC_MESES_CAP[mi]) + (a ? " " + a : "");
+  return { texto: texto.trim(), tipo: "mes", mes: isNaN(mi) ? "" : (mi + 1), anio: a };
 }
 function nitUltimo(nit) { const d = String(nit || "").replace(/\D/g, ""); return d ? d.slice(-3) : ""; }
 function recDiaSemana(d) { try { return d.toLocaleDateString("es-BO", { weekday: "long" }); } catch (e) { return ""; } }
@@ -2235,6 +2325,7 @@ async function postRecibo(rec) {
 // ---------- RECEPCIÓN (completa) ----------
 let recCli = null; // cliente seleccionado para autollenado
 let recSubtab = "form", recListFilter = "", recListSort = "fecha", recLastRec = null;
+let recComprobante = null, recCompData = null, recPasteHandler = null;
 // Genera la Orden de Recepción en HTML (misma que el correo) para ver/descargar/imprimir como PDF
 function comprobanteHTML(r) {
   const nv = "#16233f";
@@ -2288,6 +2379,7 @@ function recSortList(list) {
 }
 function paintRecepcion() {
   const canEdit = canEditClientes();
+  if (recPasteHandler) { document.removeEventListener("paste", recPasteHandler); recPasteHandler = null; }
   // La "Lista" carga el historial de la gestión elegida SOLO cuando se abre (ahorra lecturas)
   if (recSubtab === "list" && recLoadedGestion !== recGestion) {
     el("v-recepcion").innerHTML = `<h1>Recepción</h1>
@@ -2301,7 +2393,6 @@ function paintRecepcion() {
     const L = recListas(cfg);
     const nextRec = parseInt(cfg.nextRecep, 10) || 7048;
     const nextCom = parseInt(cfg.nextRecibo, 10) || 7784;
-    const mesesOpts = recMesesOpts();
     // Buscador de cliente (datalist con todos los de la Base de Datos)
     const cliDL = BD.map(c => `<option value="${escape((bdV(c, "codigoId") ? bdV(c, "codigoId") + " · " : "") + (bdV(c, "nombre") || bdV(c, "razon") || ""))}">`).join("");
     const now = new Date();
@@ -2326,42 +2417,70 @@ function paintRecepcion() {
        <td style="text-align:center">${(r.tipoPago === "DEUDOR" || r.estadoDeuda === "con_deuda") ? '<span class="badge danger">Con deuda</span>' : '<span class="badge ok">Sin deuda</span>'}</td>
        <td style="text-align:right;white-space:nowrap"><button class="mini" data-ver="${r.id}">Ver</button>${canEdit ? ` <button class="mini" data-recibo="${r.id}">Recibo</button>` : ''}${isAdmin() ? ` <button class="mini" data-delr="${r.id}">✕</button>` : ''}</td></tr>`).join("");
 
+    const g2 = "display:grid;grid-template-columns:1fr 1fr;gap:10px";
     const formHTML = !canEdit ? '<div class="note">Tu rol puede ver la recepción pero no registrar.</div>' : `
-      <div class="formcard">
-        <div class="fs">Datos automáticos</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
-          <div class="field"><label>N° Recepción</label><input id="r_nrorec" value="${nextRec}"></div>
-          <div class="field"><label>N° Comprobante</label><input id="r_nrocom" value="${nextCom}"></div>
-          <div class="field"><label>Fecha</label><input id="r_fecha" value="${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}"></div>
-          <div class="field"><label>Hora</label><input id="r_hora" value="${now.toLocaleTimeString("es-BO", { hour12: false })}"></div>
-          <div class="field"><label>NIT</label><input id="r_nit" placeholder="—"></div>
-          <div class="field"><label>Último dígito NIT</label><input id="r_ult" placeholder="—"></div>
-          <div class="field"><label>Presta servicios a</label><input id="r_rubro" placeholder="—"></div>
-          <div class="field"><label>ID Cliente</label><input id="r_idcli" placeholder="—"></div>
-        </div>
-        <div class="fs" style="margin-top:12px">Llenar datos</div>
+      <div class="formcard" style="max-width:none">
         <div class="field"><label>Cliente (escribe para buscar)</label><input id="r_clibusca" list="r_cli_dl" placeholder="Escribe el nombre o código y elige de la lista" autocomplete="off"><datalist id="r_cli_dl">${cliDL}</datalist></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
-          <div class="field"><label>Nombre / Razón Social</label><input id="r_nombre" placeholder="Nombre completo"></div>
-          <div class="field"><label>Correo (para el recibo)</label><input id="r_correo" type="email" placeholder="cliente@correo.com"></div>
-          <div class="field"><label>Celular</label><input id="r_cel" placeholder="7xxxxxxx"></div>
-          <div class="field"><label>Servicio (SERVICIOS CONTAX)</label><select id="r_serv"><option value="">— elegir —</option>${L.servicios.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
-          <div class="field"><label>Detalle de servicio</label><select id="r_det"><option value="">— elegir —</option>${L.detalles.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
-          <div class="field"><label>Mes a recepcionar</label><select id="r_mesrec"><option value="">—</option>${mesesOpts.map(m => `<option>${escape(m)}</option>`).join("")}</select></div>
-          <div class="field"><label>Mes de pago</label><select id="r_mespago"><option value="">—</option>${mesesOpts.map(m => `<option>${escape(m)}</option>`).join("")}</select></div>
-          <div class="field"><label>Fecha de pago real</label><input id="r_fpago" type="date" value="${hoyIso}" title="Cuándo pagó el cliente (para la conciliación)"></div>
-          <div class="field"><label>Total (Bs)</label><input id="r_total" type="number" step="0.01" placeholder="0.00"></div>
-          <div class="field"><label>Forma de pago</label><select id="r_pago">${L.pagos.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
-          <div class="field"><label>Atención</label><select id="r_at"><option value="">—</option>${L.atencion.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:22px;align-items:start;margin-top:6px">
+
+          <div>
+            <div class="fs">Cliente</div>
+            <div class="field"><label>Nombre / Razón Social</label><input id="r_nombre" placeholder="Nombre completo"></div>
+            <div style="${g2}">
+              <div class="field"><label>NIT</label><input id="r_nit" placeholder="—"></div>
+              <div class="field"><label>Último dígito</label><input id="r_ult" placeholder="—"></div>
+              <div class="field"><label>ID Cliente</label><input id="r_idcli" placeholder="—"></div>
+              <div class="field"><label>Presta servicios a</label><input id="r_rubro" placeholder="—"></div>
+              <div class="field"><label>Correo (recibo)</label><input id="r_correo" type="email" placeholder="cliente@correo.com"></div>
+              <div class="field"><label>Celular</label><input id="r_cel" placeholder="7xxxxxxx"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="fs">Servicio</div>
+            <div class="field"><label>Servicio (SERVICIOS CONTAX)</label><select id="r_serv"><option value="">— elegir —</option>${L.servicios.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+            <div class="field"><label>Detalle de servicio</label><select id="r_det"><option value="">— elige primero el servicio —</option></select></div>
+            <div id="r_periodo_wrap">${recPeriodoWidget("")}</div>
+            <div class="field"><label>Comentarios</label><input id="r_com" placeholder="Observaciones"></div>
+          </div>
+
+          <div>
+            <div class="fs">Pago</div>
+            <div style="${g2}">
+              <div class="field"><label>Total (Bs)</label><input id="r_total" type="number" step="0.01" placeholder="0.00"></div>
+              <div class="field"><label>Forma de pago</label><select id="r_pago">${L.pagos.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+              <div class="field"><label>Fecha de pago real</label><input id="r_fpago" type="date" value="${hoyIso}"></div>
+              <div class="field"><label>Atención</label><select id="r_at"><option value="">—</option>${L.atencion.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
+            </div>
+            <div class="fs" style="margin-top:10px">Automático</div>
+            <div style="${g2}">
+              <div class="field"><label>N° Recepción</label><input id="r_nrorec" value="${nextRec}"></div>
+              <div class="field"><label>N° Comprobante</label><input id="r_nrocom" value="${nextCom}"></div>
+              <div class="field"><label>Fecha</label><input id="r_fecha" value="${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}"></div>
+              <div class="field"><label>Hora</label><input id="r_hora" value="${now.toLocaleTimeString("es-BO", { hour12: false })}"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="fs">📷 Comprobante (opcional) — la IA llena los datos</div>
+            <div class="field" style="border:1px dashed var(--line);border-radius:10px;padding:12px">
+              <p class="note" style="margin:0 0 8px">Toma/sube una foto o <b>pega</b> (Ctrl+V) la captura del comprobante. La IA llena Total, Banco, N° de operación y Depositante.</p>
+              <input id="r_compfile" type="file" accept="image/*" capture="environment">
+              <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+                <button type="button" class="btn sec" id="r_compread" style="border:1px solid var(--line)" disabled>🤖 Leer con IA</button>
+                <span class="msg" id="r_compmsg"></span>
+              </div>
+              <div id="r_compprev" style="margin-top:8px"></div>
+            </div>
+            <div style="${g2}">
+              <div class="field"><label>Banco</label><input id="r_banco" placeholder="Ej. BNB, BCP…"></div>
+              <div class="field"><label>N° de operación</label><input id="r_oper" placeholder="—"></div>
+            </div>
+            <div class="field"><label>Depositante</label><input id="r_depo" placeholder="Quién hizo el pago"></div>
+          </div>
+
         </div>
-        <div class="field"><label>Comentarios</label><input id="r_com" placeholder="Observaciones (NO la fecha de pago, esa va arriba)"></div>
-        <div class="fs" style="margin-top:12px">Datos del comprobante / transacción (opcional)</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px">
-          <div class="field"><label>Banco</label><input id="r_banco" placeholder="Ej. BNB, BCP…"></div>
-          <div class="field"><label>N° de operación</label><input id="r_oper" placeholder="—"></div>
-          <div class="field"><label>Depositante</label><input id="r_depo" placeholder="Quién hizo el pago"></div>
-        </div>
-        <p class="note" style="margin:8px 0 4px">📧 Al registrar se enviará automáticamente la Orden de Recepción al correo del cliente (si tiene correo).</p>
+        <p class="note" style="margin:10px 0 4px">📧 Al registrar se enviará automáticamente la Orden de Recepción al correo del cliente (si tiene correo).</p>
         <button class="btn" id="r_save">Registrar recepción</button>
         <div class="msg" id="r_msg"></div>
       </div>`;
@@ -2416,6 +2535,44 @@ function paintRecepcion() {
           recFill("r_correo", bdV(c, "correo")); recFill("r_cel", bdV(c, "celular"));
         }
       };
+      // Servicio → detalle dependiente + período según categoría
+      const serv = el("r_serv");
+      const refreshServicio = () => {
+        const cat = recCategoria(serv ? serv.value : "", "");
+        const dets = recDetallesPorCat(cat, L);
+        const det = el("r_det");
+        if (det) det.innerHTML = `<option value="">— elegir —</option>` + dets.map(s => `<option>${escape(s)}</option>`).join("");
+        const pw = el("r_periodo_wrap"); if (pw) pw.innerHTML = recPeriodoWidget(cat);
+      };
+      if (serv) serv.onchange = refreshServicio;
+      // Comprobante con IA (igual que en el CRM)
+      const setCompPrev = (dataUrl) => { recComprobante = dataUrl; recCompData = null; const p = el("r_compprev"); if (p) p.innerHTML = `<img src="${dataUrl}" style="max-height:130px;border-radius:8px;border:1px solid var(--line)">`; if (el("r_compread")) el("r_compread").disabled = false; const m = el("r_compmsg"); if (m) { m.className = "msg"; m.textContent = "Listo. Toca “Leer con IA”."; } };
+      if (el("r_compfile")) el("r_compfile").onchange = async () => {
+        const f = el("r_compfile").files && el("r_compfile").files[0]; if (!f) return;
+        const m = el("r_compmsg"); if (m) { m.className = "msg"; m.textContent = "Preparando imagen…"; }
+        try { setCompPrev(await cxCompressImage(f)); } catch (e) { if (m) { m.className = "msg err"; m.textContent = e.message || "No se pudo preparar la imagen."; } }
+      };
+      if (el("r_compread")) el("r_compread").onclick = async () => {
+        if (!recComprobante) return;
+        const m = el("r_compmsg"), btn = el("r_compread");
+        btn.disabled = true; const o = btn.textContent; btn.textContent = "Leyendo…"; if (m) { m.className = "msg"; m.textContent = ""; }
+        const r = await ocrComprobanteGemini(recComprobante);
+        btn.disabled = false; btn.textContent = o;
+        if (r.error) { if (m) { m.className = "msg err"; m.textContent = r.error; } return; }
+        recCompData = r.data || {}; const d = recCompData;
+        if (d.importe && el("r_total") && !el("r_total").value) { const n = parseFloat(String(d.importe).replace(/[^\d.]/g, "")); if (!isNaN(n)) el("r_total").value = n; }
+        if (d.banco && el("r_banco") && !el("r_banco").value) el("r_banco").value = d.banco;
+        if (d.nroOperacion && el("r_oper") && !el("r_oper").value) el("r_oper").value = d.nroOperacion;
+        if (d.depositante && el("r_depo") && !el("r_depo").value) el("r_depo").value = d.depositante;
+        if (m) { m.className = "msg ok"; m.textContent = "✓ Datos extraídos. Revísalos antes de registrar." + (d.destino && !/contax/i.test(d.destino) ? " ⚠ El destino no parece CONTAX." : ""); }
+      };
+      // Pegar imagen con Ctrl+V
+      recPasteHandler = (ev) => {
+        if (recSubtab !== "form") return;
+        const items = (ev.clipboardData && ev.clipboardData.items) || [];
+        for (const it of items) { if (it.type && it.type.indexOf("image") === 0) { const f = it.getAsFile(); if (f) { cxCompressImage(f).then(setCompPrev).catch(() => {}); ev.preventDefault(); break; } } }
+      };
+      document.addEventListener("paste", recPasteHandler);
       if (el("r_save")) el("r_save").onclick = registrarRecepcion;
       if (recFlash && el("r_msg")) {
         el("r_msg").className = "msg ok"; el("r_msg").innerHTML = escape(recFlash) + (recLastRec ? ` <button class="btn sec" id="r_vercomp" style="border:1px solid var(--line);margin-left:8px;padding:3px 10px">👁 Ver comprobante</button>` : "");
@@ -2448,7 +2605,11 @@ async function registrarRecepcion() {
     const nroCom = await recNextNum("nextRecibo", 7784);
     const now = new Date();
     const detalle = el("r_det").value;
-    const mesRec = el("r_mesrec").value;
+    const per = recLeerPeriodo();
+    const fpago = el("r_fpago").value || "";
+    // Mes de pago legible, derivado de la fecha de pago real
+    let mesPagoTxt = "";
+    if (fpago) { const dp = new Date(fpago + "T00:00:00"); if (!isNaN(dp)) mesPagoTxt = REC_MESES_CAP[dp.getMonth()] + " " + dp.getFullYear(); }
     const tipoPago = el("r_pago").value;
     const rec = {
       nroRecepcion: nroRec, nroComprobante: nroCom,
@@ -2458,8 +2619,9 @@ async function registrarRecepcion() {
       tipoContribuyente: recCli ? bdV(recCli, "tipo") : "", rubro: el("r_rubro").value.trim(),
       actividad: recCli ? bdV(recCli, "actP") : "", aperturaNit: recCli ? bdV(recCli, "fechaNit") : "", matriculaComercio: recCli ? bdV(recCli, "estMat") : "",
       servicio: servicio, servicioNombre: servicio, detalleServicio: detalle,
-      mesRecepcion: mesRec, anio: (mesRec.match(/\.\/(\d{2})$/) ? "20" + mesRec.match(/\.\/(\d{2})$/)[1] : ""), mesPago: el("r_mespago").value,
-      fechaPago: el("r_fpago").value || "",
+      mesRecepcion: per.texto, periodoTipo: per.tipo, periodoMes: per.mes, periodoAnio: per.anio,
+      anio: per.anio || "", mesPago: mesPagoTxt,
+      fechaPago: fpago,
       importe: total, tipoPago: tipoPago, atencion: el("r_at").value, comentarios: el("r_com").value.trim(),
       compBanco: el("r_banco").value.trim(), compNroOperacion: el("r_oper").value.trim(), compDepositante: el("r_depo").value.trim(),
       tipo: recTipoDe(servicio, detalle), estado: "pendiente", estadoDeuda: (tipoPago === "DEUDOR" ? "con_deuda" : "sin_deuda"),
@@ -2476,7 +2638,7 @@ async function registrarRecepcion() {
     RECEP.unshift(Object.assign({}, rec));
     recFlash = `✓ Recepción N° ${nroRec} registrada` + (rec.clienteCorreo ? (enviado ? " y Orden enviada al correo." : " (no se pudo enviar el PDF; revisa la URL de recibos en Configuración).") : " (el cliente no tiene correo: no se envió PDF).") + ` — míralo en la pestaña "Lista".`;
     recLastRec = rec;
-    recCli = null;
+    recCli = null; recComprobante = null; recCompData = null;
     paintRecepcion();
   } catch (e) { btn.disabled = false; btn.textContent = "Registrar recepción"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
 }
