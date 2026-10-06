@@ -113,6 +113,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Registro de movimientos de clientes (altas, bajas, cambios de estado)
+    match /bdlog/{id} {
+      allow read: if portalView();
+      allow create: if portalEdit() || isAgent();
+      allow update, delete: if isAdmin();
+    }
+
     // ----- Tarifas y servicios (pestaña Tarifas · v3) -----
     // Las ve todo el portal; además la extensión (agentes) podrá leerlas
     // para cotizar precios en WhatsApp. Gestiona: editor/cajero/sup/admin.

@@ -1,0 +1,75 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v16
+ Módulo de SUSCRIPCIONES (en la pestaña Tarifas)
+===============================================================
+
+La pestaña "Tarifas" ahora se llama "Tarifas y Suscripciones" y tiene
+dos subpestañas:
+
+   • Catálogo de servicios  → lo de siempre (precios, plazos, lo lee la IA).
+   • Suscripciones          → el nuevo control de suscripciones mensuales.
+
+
+CÓMO FUNCIONA EL CONTROL DE SUSCRIPCIONES
+-----------------------------------------
+NO tienes que marcar nada aparte. El sistema calcula todo solo cruzando
+los PAGOS que ya registras en Recepción con el MES calendario.
+
+1) MES A CONTROLAR
+   Arriba eliges el mes y el año (por defecto el mes actual). Todo lo de
+   abajo se recalcula para ese mes.
+
+2) QUIÉN ESTÁ AL DÍA Y QUIÉN NO
+   • AL DÍA  → el cliente tiene un pago registrado en Recepción cuyo
+     "Mes a recepcionar" es ese mes.
+   • SUSPENDIDO / SIN PAGO → no hay pago para ese mes. Como la recepción
+     del 25 al 30 ya cubre el mes siguiente, al llegar el 1ro quien no
+     pagó aparece automáticamente como "Suspendido (sin pago)".
+     (Si miras un mes futuro, aparecen como "Por renovar", no suspendidos.)
+
+3) PLANES (se detectan solos por el monto)
+     20 Bs → Facturación     50 / 60 Bs → Standard
+     30 Bs → Básico          95 Bs → Premium
+   A los repartidores (YANGO, PedidosYa, TADA, ToGo, Turbo…) se les marca
+   con una etiqueta "repartidor". Si algún plan se detectó mal, el
+   administrador puede forzarlo con el botón ⚙ de cada fila (o excluir a
+   quien no sea suscriptor).
+
+4) TARIFA STANDARD 50 / 60
+   El sistema te recuerda la ventana: 50 Bs si paga del 25 al 30
+   (anticipado) y 60 Bs si paga del 1 al 5.
+
+5) AVISAR A LOS MOROSOS (reactivar)
+   En la lista de suspendidos cada cliente tiene un botón "📲 Avisar" que
+   abre WhatsApp con un mensaje listo para que renueve su suscripción.
+
+6) INDICADORES
+   Suscriptores totales, cuántos al día, cuántos suspendidos y cuánto se
+   cobró ese mes por suscripciones. Más el desglose por plan.
+
+7) SUSPENDER EN LA BASE DE DATOS DE UNA VEZ (opcional)
+   Cuando miras el mes actual y hay morosos, aparece un botón
+   "⛔ Aplicar suspensión en la BD": marca a TODOS los morosos (que estén
+   en la base) como "SUSCRIPCIÓN INACTIVA" de un solo clic, y queda en el
+   registro de Movimientos. Así no cambias uno por uno. Es opcional: en la
+   lista ya se ven como suspendidos sin tocar nada.
+
+8) EXPORTAR
+   Botón "⬇ Exportar" baja la lista que estás viendo a Excel/CSV.
+
+
+IMPORTANTE
+----------
+ - Para que un cliente aparezca aquí, su pago de suscripción debe estar
+   registrado en Recepción (servicio Declaración Mensual o Facturación).
+ - Los celulares y correos salen de la Base de Datos (los cruza por NIT
+   o Código de ID). Si falta el celular, no se muestra el botón Avisar.
+
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v16 (súbelo a GitHub)
+ - LEEME-v16.txt
+Sin cambios en las reglas de Firestore (usa las de v15 con bdlog).
+El CRM sigue acumulándose en su propio zip para Edge.
+===============================================================

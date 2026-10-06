@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "14";
+const APP_VERSION = "16";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -1214,6 +1214,9 @@ function paintBaseDatos() {
   const tipos = [...new Set(BD.map(r =>bdV(r, "tipo")).filter(Boolean))].sort();
   const estados = [...new Set(BD.map(r =>bdV(r, "estado")).filter(Boolean))].sort();
   const list = BD.filter(r => {
+    // Filtro por subpestaña: Activos / Otros estados
+    if (bdSubtab === "activos" && !bdEstadoInfo(r).activo) return false;
+    if (bdSubtab === "otros" && bdEstadoInfo(r).activo) return false;
     if (bdEstado) {
       if (bdEstado.indexOf("g:") === 0) { if (bdEstadoInfo(r).grupo !== bdEstado.slice(2)) return false; }
       else if (bdV(r, "estado") !== bdEstado) return false;
@@ -1226,9 +1229,12 @@ function paintBaseDatos() {
     }
     return true;
   });
+  const codeNum = r => { const n = parseInt(String(bdV(r, "codigoId")).replace(/\D/g, ""), 10); return isNaN(n) ? -1 : n; };
   if (bdSort === "nombre") list.sort((a, b) => String(bdV(a, "nombre") || bdV(a, "razon")).localeCompare(String(bdV(b, "nombre") || bdV(b, "razon"))));
   else if (bdSort === "estado") list.sort((a, b) => String(bdV(a, "estado")).localeCompare(String(bdV(b, "estado"))));
   else if (bdSort === "costo") list.sort((a, b) => bdMoney(bdV(b, "costo")) - bdMoney(bdV(a, "costo")));
+  else if (bdSort === "antiguo") list.sort((a, b) => codeNum(a) - codeNum(b));
+  else list.sort((a, b) => codeNum(b) - codeNum(a)); // "reciente" por defecto (código más alto primero)
   const counts = { activo: 0, facturacion: 0, inactivo: 0, nit_baja: 0, susc_inact: 0, lista_negra: 0, otro: 0 };
   BD.forEach(r => { counts[bdEstadoInfo(r).grupo] = (counts[bdEstadoInfo(r).grupo] || 0) + 1; });
   const total = BD.length, activos = counts.activo;
@@ -1267,9 +1273,10 @@ function paintBaseDatos() {
       <input id="bd_search" class="mini" style="padding:9px;min-width:240px" placeholder="Buscar en toda la base…" value="${escape(bdFilter)}">
       <select id="bd_estado" class="mini" style="padding:9px"><option value="">Todos los estados</option><optgroup label="Por categoría">${BD_ESTADO_DEFS.map(d => `<option value="g:${d[0]}">${escape(d[1])} (${counts[d[0]] || 0})</option>`).join("")}</optgroup><optgroup label="Texto exacto del Sheet">${estados.map(e => `<option value="${escape(e)}">${escape(e)}</option>`).join("")}</optgroup></select>
       <select id="bd_tipo" class="mini" style="padding:9px"><option value="">Todos los tipos</option>${tipos.map(t => `<option value="${escape(t)}">${escape(t)}</option>`).join("")}</select>
-      <select id="bd_sort" class="mini" style="padding:9px"><option value="">Orden de la hoja</option><option value="nombre">Nombre (A-Z)</option><option value="estado">Estado</option><option value="costo">Costo (mayor)</option></select>
+      <select id="bd_sort" class="mini" style="padding:9px"><option value="">Más recientes</option><option value="antiguo">Más antiguos</option><option value="nombre">Nombre (A-Z)</option><option value="estado">Estado</option><option value="costo">Costo (mayor)</option></select>
       ${canEdit ? '<button class="btn" id="bd_new">＋ Nuevo</button>' : ""}
       <button class="btn sec" id="bd_cols" style="border:1px solid var(--line)">Columnas${bdHidden.length ? ` (${visHeader.length}/${bdHeader.length})` : ""}</button>
+      <button class="btn sec" id="bd_download" style="border:1px solid var(--line)">⬇ Descargar</button>
       <button class="btn sec" id="bd_reload" style="border:1px solid var(--line)">Actualizar</button>
       ${(isAdmin() && !bdEnFirebaseFlag) ? '<button class="btn" id="bd_migrar" style="background:var(--green);border-color:var(--green)" title="Copiar todo a Firebase y dejar de usar Google Sheets">⬆ Migrar a Firebase</button>' : ''}
       ${bdEnFirebaseFlag ? '<span class="badge ok" style="align-self:center;padding:4px 10px">⚡ En Firebase</span>' : ''}
@@ -1279,15 +1286,21 @@ function paintBaseDatos() {
       <thead>${thead}</thead>
       <tbody>${rows || `<tr><td colspan="${colspan}" style="color:var(--muted)">Sin registros con estos filtros.</td></tr>`}</tbody></table></div>
     <p class="note" style="margin-top:10px">Mostrando ${list.length} de ${total}. Toca una fila para ver la ficha completa. Desliza a los lados para ver todas las columnas.</p>`;
-  el("v-basedatos").innerHTML = `<h1>Base de Datos</h1>
-    <p class="lead">${bdEnFirebaseFlag ? `Base de Datos <b>BDCONTAX</b>en Firebase (rápida), con las ${bdHeader.length} columnas. Lo que edites se guarda al instante; el Google Sheet queda como respaldo.` : `Tu hoja <b>BDCONTAX</b>de Google Sheets, con las ${bdHeader.length} columnas tal cual. Lo que edites aquí se guarda en el Sheet, y lo que cambies en el Sheet aparece aquí.`}</p>
+  const isList = bdSubtab !== "resumen" && bdSubtab !== "movimientos";
+  el("v-basedatos").innerHTML = `<h1>Clientes</h1>
+    <p class="lead">${bdEnFirebaseFlag ? `Base de datos de clientes en Firebase (rápida), con las ${bdHeader.length} columnas.` : `Tu hoja <b>BDCONTAX</b>de Google Sheets, con las ${bdHeader.length} columnas tal cual.`}</p>
     <div class="subtabs">
       <button class="subtab ${bdSubtab === 'resumen' ? 'on' : ''}" data-st="resumen">Resumen</button>
-      <button class="subtab ${bdSubtab === 'lista' ? 'on' : ''}" data-st="lista">Lista (${total})</button>
+      <button class="subtab ${bdSubtab === 'general' ? 'on' : ''}" data-st="general">General (${total})</button>
+      <button class="subtab ${bdSubtab === 'activos' ? 'on' : ''}" data-st="activos">Activos (${counts.activo})</button>
+      <button class="subtab ${bdSubtab === 'otros' ? 'on' : ''}" data-st="otros">Otros estados (${total - counts.activo})</button>
+      <button class="subtab ${bdSubtab === 'movimientos' ? 'on' : ''}" data-st="movimientos">Movimientos</button>
     </div>
     <div ${bdSubtab === 'resumen' ? '' : 'style="display:none"'}>${resumenHTML}</div>
-    <div ${bdSubtab === 'lista' ? '' : 'style="display:none"'}>${listaHTML}</div>`;
-  el("v-basedatos").querySelectorAll(".subtab").forEach(b => b.onclick = () => { bdSubtab = b.dataset.st; paintBaseDatos(); });
+    <div ${isList ? '' : 'style="display:none"'}>${listaHTML}</div>
+    <div ${bdSubtab === 'movimientos' ? '' : 'style="display:none"'} id="bd-mov"></div>`;
+  el("v-basedatos").querySelectorAll(".subtab").forEach(b => b.onclick = () => { bdSubtab = b.dataset.st; if (bdSubtab !== "resumen" && bdSubtab !== "general" && bdSubtab !== "activos" && bdSubtab !== "otros" && bdSubtab !== "movimientos") bdSubtab = "general"; paintBaseDatos(); });
+  if (bdSubtab === "movimientos") renderBDMovimientos();
   if (el("bd_sort")) { el("bd_sort").value = bdSort; el("bd_sort").onchange = () => { bdSort = el("bd_sort").value; paintBaseDatos(); }; }
   if (el("bd_search")) el("bd_search").oninput = () => { bdFilter = el("bd_search").value; paintBaseDatos(); const nb = el("bd_search"); if (nb) { nb.focus(); nb.setSelectionRange(nb.value.length, nb.value.length); } };
   if (el("bd_estado")) { el("bd_estado").value = bdEstado; el("bd_estado").onchange = () => { bdEstado = el("bd_estado").value; paintBaseDatos(); }; }
@@ -1296,7 +1309,8 @@ function paintBaseDatos() {
   if (el("bd_cols")) el("bd_cols").onclick = () => openBDColsModal();
   if (el("bd_reload")) el("bd_reload").onclick = () =>renderBaseDatos(true);
   if (el("bd_migrar")) el("bd_migrar").onclick = () => migrarBDaFirebase();
-  el("v-basedatos").querySelectorAll(".bd-kpi").forEach(k => { k.style.cursor = "pointer"; k.onclick = () => { const g = "g:" + k.dataset.gfilter; bdEstado = (bdEstado === g) ? "" : g; bdSubtab = "lista"; paintBaseDatos(); }; });
+  el("v-basedatos").querySelectorAll(".bd-kpi").forEach(k => { k.style.cursor = "pointer"; k.onclick = () => { const g = "g:" + k.dataset.gfilter; bdEstado = (bdEstado === g) ? "" : g; bdSubtab = "general"; paintBaseDatos(); }; });
+  if (el("bd_download")) el("bd_download").onclick = () => openBDDownloadModal(list);
   el("v-basedatos").querySelectorAll("[data-edit]").forEach(b =>b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
   el("v-basedatos").querySelectorAll("tr[data-open]").forEach(r =>r.onclick = () =>openBDModal(BD[+r.dataset.open]));
   // Resaltado de columna: al pasar el cursor, ilumina toda la columna
@@ -1352,6 +1366,69 @@ function openBDColsModal() {
   };
 }
 
+// Registro de movimientos (alta / baja / cambio de estado)
+async function bdLog(e) {
+  try {
+    const entry = { fechaISO: new Date().toISOString(), accion: e.accion || "", nombre: e.nombre || "", estadoAnterior: e.estadoAnterior || "", estadoNuevo: e.estadoNuevo || "", porUid: (ME && ME.uid) || "", porNombre: (ME && (ME.name || ME.email)) || "", createdAt: serverTimestamp() };
+    await setDoc(doc(collection(db, "bdlog")), entry);
+  } catch (err) {}
+}
+function esBaja(estado) { return /inactiv|negra|suspend|baja/i.test(String(estado || "").normalize("NFD").replace(/[̀-ͯ]/g, "")); }
+async function renderBDMovimientos() {
+  const box = el("bd-mov"); if (!box) return;
+  box.innerHTML = `<p class="lead"><span class="cx-spin"></span> Cargando movimientos…</p>`;
+  let logs = [];
+  try { const snap = await getDocs(query(collection(db, "bdlog"), orderBy("fechaISO", "desc"), limit(500))); logs = snap.docs.map(d => d.data()); }
+  catch (e) { box.innerHTML = `<p class="note">Aún no hay registro de movimientos (se empieza a llenar cuando des de alta/baja o cambies estados). Si ves un error, revisa que agregaste la regla de Firestore para <b>bdlog</b>.</p>`; return; }
+  if (!logs.length) { box.innerHTML = `<p class="note">Todavía no hay movimientos registrados. A partir de ahora, cada alta, baja o cambio de estado quedará aquí con su fecha.</p>`; return; }
+  const byMonth = {};
+  logs.forEach(l => { const m = (l.fechaISO || "").slice(0, 7); if (!m) return; byMonth[m] = byMonth[m] || { alta: 0, baja: 0, cambio: 0 }; if (l.accion === "alta") byMonth[m].alta++; else if (esBaja(l.estadoNuevo)) byMonth[m].baja++; else byMonth[m].cambio++; });
+  const months = Object.keys(byMonth).sort().reverse().slice(0, 12);
+  const MES = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const mLbl = m => { const p = m.split("-"); return (MES[parseInt(p[1], 10)] || p[1]) + " " + p[0]; };
+  const resumen = `<table style="max-width:520px"><thead><tr><th>Mes</th><th style="text-align:center">Nuevos</th><th style="text-align:center">Bajas</th><th style="text-align:center">Otros cambios</th></tr></thead>
+    <tbody>${months.map(m => `<tr><td>${mLbl(m)}</td><td style="text-align:center;color:var(--green);font-weight:700">${byMonth[m].alta}</td><td style="text-align:center;color:var(--danger);font-weight:700">${byMonth[m].baja}</td><td style="text-align:center">${byMonth[m].cambio}</td></tr>`).join("")}</tbody></table>`;
+  const rows = logs.slice(0, 200).map(l => `<tr>
+    <td class="mono">${escape(fmtFecha(l.fechaISO))}</td>
+    <td>${l.accion === "alta" ? '<span class="badge ok">Alta</span>' : (esBaja(l.estadoNuevo) ? '<span class="badge danger">Baja</span>' : '<span class="badge off">Cambio</span>')}</td>
+    <td><b>${escape(l.nombre || "—")}</b></td>
+    <td>${escape(l.estadoAnterior || "")}${l.estadoAnterior && l.estadoNuevo ? " → " : ""}${escape(l.estadoNuevo || "")}</td>
+    <td>${escape(l.porNombre || "")}</td></tr>`).join("");
+  box.innerHTML = `<h3 style="margin:6px 0 8px">Resumen por mes</h3>${resumen}
+    <h3 style="margin:18px 0 8px">Movimientos recientes</h3>
+    <div class="bd-scroll"><table class="bd-table"><thead><tr><th>Fecha</th><th>Acción</th><th>Cliente</th><th>Estado</th><th>Por</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+// Descargar seleccionando columnas (abre en Excel)
+function openBDDownloadModal(list) {
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const defaults = bdHeader.filter(h => { const k = bdHeaderToKey(h); return k === "nombre" || k === "nit" || k === "celular" || k === "codigoId" || k === "estado"; });
+  const items = bdHeader.map(h => {
+    const on = defaults.indexOf(h) >= 0;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:13px;cursor:pointer"><input type="checkbox" data-dc="${escape(h)}" ${on ? "checked" : ""} style="width:auto"><span style="flex:1">${escape(h)}</span></label>`;
+  }).join("");
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;width:520px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><h3 style="margin:0">Descargar (Excel/CSV)</h3><button class="mini" id="dc_x">✕</button></div>
+    <p class="note" style="margin:0 0 10px">Elige qué columnas descargar. Se bajan los <b>${list.length}</b>registros que estás viendo ahora (según el filtro/subpestaña actual).</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn sec" id="dc_all" style="flex:1;border:1px solid var(--line)">Todas</button><button class="btn sec" id="dc_none" style="flex:1;border:1px solid var(--line)">Ninguna</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;overflow-y:auto;flex:1">${items}</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn" id="dc_go">⬇ Descargar</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = e => { if (e.target === bg) close(); };
+  bg.querySelector("#dc_x").onclick = close;
+  bg.querySelector("#dc_all").onclick = () => bg.querySelectorAll("input[data-dc]").forEach(c => c.checked = true);
+  bg.querySelector("#dc_none").onclick = () => bg.querySelectorAll("input[data-dc]").forEach(c => c.checked = false);
+  bg.querySelector("#dc_go").onclick = () => {
+    const cols = [...bg.querySelectorAll("input[data-dc]")].filter(c => c.checked).map(c => c.dataset.dc);
+    if (!cols.length) { alert("Elige al menos una columna."); return; }
+    const rws = list.map(r => cols.map(h => String(r[h] == null ? "" : r[h])));
+    downloadCSV("CONTAX-Clientes-" + hoyISO() + ".csv", cols, rws);
+    close();
+  };
+}
+
 function openBDModal(row) {
   const canEdit = canEditClientes();
   const bg = document.createElement("div");
@@ -1396,8 +1473,20 @@ function openBDModal(row) {
     });
     if (!item[BD_KEY2LBL["razon"]] && !item[BD_KEY2LBL["nombre"]]) { bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "Pon al menos el nombre o razón social."; return; }
     saveBtn.disabled = true; bg.querySelector("#bf_msg").className = "msg"; bg.querySelector("#bf_msg").textContent = "Guardando…";
+    const estAnt = row ? bdV(row, "estado") : "";
+    const estNue = item[BD_KEY2LBL["estado"]] || "";
+    const nombreCli = item[BD_KEY2LBL["nombre"]] || item[BD_KEY2LBL["razon"]] || "";
+    const nowISO = new Date().toISOString();
+    // Marcas de fecha automáticas (alta/baja) en la propia ficha
+    if (!row) itemByHeader["_altaISO"] = nowISO;
+    if (row && estNue !== estAnt && /inactiv|negra|suspend|baja/i.test(estNue.normalize("NFD").replace(/[̀-ͯ]/g, ""))) itemByHeader["_bajaISO"] = nowISO;
     const ok = await bdSave(item, row ? bdV(row, "codigoId") : "", itemByHeader, row ? row._docid : "");
-    if (ok) { close(); renderBaseDatos(); setTimeout(() => { const mm = el("bd_msg"); if (mm) { mm.className = "msg ok"; mm.textContent = "✓ Guardado."; } }, 400); }
+    if (ok) {
+      // Registro de movimiento
+      if (!row) bdLog({ accion: "alta", nombre: nombreCli, estadoNuevo: estNue });
+      else if (estNue !== estAnt) bdLog({ accion: "cambio_estado", nombre: nombreCli, estadoAnterior: estAnt, estadoNuevo: estNue });
+      close(); renderBaseDatos(true); setTimeout(() => { const mm = el("bd_msg"); if (mm) { mm.className = "msg ok"; mm.textContent = "✓ Guardado."; } }, 400);
+    }
     else { saveBtn.disabled = false; bg.querySelector("#bf_msg").className = "msg err"; bg.querySelector("#bf_msg").textContent = "No se pudo guardar."; }
   };
 }
@@ -1458,12 +1547,25 @@ async function tarLoad() {
   TARIFAS.sort((a, b) => (a.categoria || "").localeCompare(b.categoria || "") || (a.orden || 0) - (b.orden || 0) || (a.nombre || "").localeCompare(b.nombre || ""));
 }
 function tarMoney(v) { const n = Number(v); return isNaN(n) ? "" : ("Bs " + n.toLocaleString("es-BO", { maximumFractionDigits: 2 })); }
+let tarSubtab = "servicios";
 async function renderTarifas() {
-  el("v-tarifas").innerHTML = `<h1>Tarifas</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  el("v-tarifas").innerHTML = `<h1>Tarifas y Suscripciones</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
   await tarLoad();
-  paintTarifas();
+  paintTarifasView();
+}
+function paintTarifasView() {
+  el("v-tarifas").innerHTML = `<h1>Tarifas y Suscripciones</h1>
+    <div class="subtabs">
+      <button class="subtab ${tarSubtab === 'servicios' ? 'on' : ''}" data-st="servicios">Catálogo de servicios</button>
+      <button class="subtab ${tarSubtab === 'suscripciones' ? 'on' : ''}" data-st="suscripciones">Suscripciones</button>
+    </div>
+    <div id="tar-body"></div>`;
+  el("v-tarifas").querySelectorAll(".subtab").forEach(b => b.onclick = () => { tarSubtab = b.dataset.st; paintTarifasView(); });
+  if (tarSubtab === "suscripciones") paintSuscripciones();
+  else paintTarifas();
 }
 function paintTarifas() {
+  const box = el("tar-body") || el("v-tarifas");
   const admin = isAdmin();
   const term = tarFilter.toLowerCase().trim();
   const list = TARIFAS.filter(t => !term || `${t.nombre || ""} ${t.categoria || ""} ${t.descripcion || ""}`.toLowerCase().includes(term));
@@ -1481,7 +1583,7 @@ function paintTarifas() {
         <td style="text-align:right;white-space:nowrap">${admin ? `<button class="mini" data-edit="${t.id}">Editar</button> <button class="mini" data-del="${t.id}">✕</button>` : ''}</td></tr>`;
     });
   });
-  el("v-tarifas").innerHTML = `<h1>Tarifas</h1>
+  box.innerHTML = `
     <p class="lead">Catálogo de servicios con precios, plazos y detalle. El Asistente IA del Panel lo usa para responder. ${admin ? 'Edita aquí y se actualiza para todo el equipo.' : ''}</p>
     <div class="toolbar">
       <input id="tar_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar servicio…" value="${escape(tarFilter)}">
@@ -1562,6 +1664,289 @@ function buildTarifasText() {
   return txt.slice(0, 6000);
 }
 async function saveTarifasText() { try { await setDoc(doc(db, "config", "app"), { tarifasText: buildTarifasText(), updatedAt: serverTimestamp() }, { merge: true }); } catch (e) {} }
+
+// ============================================================
+//  MÓDULO SUSCRIPCIONES — control de planes, al día / morosos
+//  Se calcula CRUZANDO las recepciones (pagos) con el mes calendario.
+//  Regla CONTAX: el mes de la suscripción = mes calendario (no 30 días).
+//  Pago del 25 al 30 = anticipado, cubre el mes siguiente (así lo registra
+//  la recepcionista en "Mes a recepcionar"). El 1ro, quien no pagó el mes
+//  en curso queda, de forma automática y visual, como SUSPENDIDO.
+// ============================================================
+let suscMesIdx = new Date().getMonth();   // 0-11
+let suscAnio = new Date().getFullYear();
+let suscFiltro = "";
+let suscVista = "morosos";                 // morosos | aldia | todos
+const SUSC_PLANES = {
+  basico:      { lbl: "Básico",      precio: "30 Bs",      color: "#1f8a4c" },
+  standard:    { lbl: "Standard",    precio: "50 / 60 Bs", color: "#0d6efd" },
+  premium:     { lbl: "Premium",     precio: "95 Bs",      color: "#7a3ff2" },
+  facturacion: { lbl: "Facturación", precio: "20 Bs",      color: "#b8860b" },
+  otro:        { lbl: "Otro",        precio: "—",          color: "#55617a" }
+};
+const SUSC_FLOTAS = ["YANGO", "PEDIDOSYA", "PEDIDOS YA", "TADA", "TOGO", "TO GO", "TURBO", "UBER", "DIDI"];
+function suscNorm(s) { return String(s || "").toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim(); }
+function suscEsServicioSusc(servicio, imp) {
+  const s = suscNorm(servicio);
+  if (/TRAMITE|BALANCE|EEFF|ESTADO FINANCIERO/.test(s)) return false;
+  if (/DECLARAC|FACTURAC|SUSCRIP|MENSUAL/.test(s)) return true;
+  return [20, 30, 50, 60, 95].indexOf(Math.round(Number(imp) || 0)) >= 0;
+}
+function suscEsDeclaracion(servicio, imp) {
+  const s = suscNorm(servicio);
+  if (/DECLARAC|MENSUAL/.test(s)) return true;
+  if (/FACTURAC/.test(s)) return false;
+  return [30, 50, 60, 95].indexOf(Math.round(Number(imp) || 0)) >= 0;
+}
+function suscPlanFromImporte(imp, servicio) {
+  const r = Math.round(Number(imp) || 0);
+  if (/FACTURAC/.test(suscNorm(servicio)) && r <= 25) return "facturacion";
+  if (r === 20) return "facturacion";
+  if (r === 30) return "basico";
+  if (r === 50 || r === 60) return "standard";
+  if (r === 95) return "premium";
+  return "otro";
+}
+function suscEsRepartidor(txt) { const s = suscNorm(txt); return SUSC_FLOTAS.some(f => s.indexOf(f) >= 0); }
+// Etiqueta de mes como la usa la recepción: "OCTUBRE./26"
+function suscMesLabel(idx, anio) { return REC_MESES[idx] + "./" + String(anio).slice(2); }
+function suscKeyDe(r) { return (r.clienteId || r.codigoId || r.nit || r.clienteNombre || "").toString().trim().toUpperCase(); }
+function suscTelLimpio(t) { let d = String(t || "").replace(/\D/g, ""); if (d.length >= 8 && d.indexOf("591") !== 0 && d.length <= 9) d = "591" + d; return d; }
+
+// Arma la estructura de suscriptores a partir de las recepciones cargadas (RECEP)
+function suscBuild(overrides) {
+  overrides = overrides || {};
+  const bdByCode = {}, bdByNit = {};
+  BD.forEach(r => { const c = suscNorm(bdV(r, "codigoId")); const n = suscNorm(bdV(r, "nit")); if (c) bdByCode[c] = r; if (n) bdByNit[n] = r; });
+  const map = {};
+  RECEP.forEach(r => {
+    const imp = Number(r.importe) || 0;
+    if (!suscEsServicioSusc(r.servicio || r.servicioNombre, imp)) return;
+    const key = suscKeyDe(r);
+    if (!key) return;
+    if (!map[key]) {
+      const bd = bdByCode[suscNorm(r.clienteId || r.codigoId)] || bdByNit[suscNorm(r.nit)] || null;
+      map[key] = {
+        key, bd,
+        codigoId: r.clienteId || r.codigoId || (bd ? bdV(bd, "codigoId") : ""),
+        nit: r.nit || (bd ? bdV(bd, "nit") : ""),
+        nombre: r.clienteNombre || (bd ? (bdV(bd, "nombre") || bdV(bd, "razon")) : "") || "—",
+        celular: (bd ? bdV(bd, "celular") : "") || r.clienteCelular || "",
+        correo: (bd ? bdV(bd, "correo") : "") || r.clienteCorreo || "",
+        pagos: [], declPlan: null, declUlt: "", repartidor: false
+      };
+    }
+    const m = map[key];
+    m.pagos.push(r);
+    if (suscEsRepartidor([r.clienteNombre, r.detalleServicio, r.servicio].join(" "))) m.repartidor = true;
+    if (suscEsDeclaracion(r.servicio || r.servicioNombre, imp)) {
+      const f = r.fechaPago || r.fechaISO || "";
+      if (f >= (m.declUlt || "")) { m.declUlt = f; m.declPlan = suscPlanFromImporte(imp, r.servicio); }
+    }
+  });
+  // Determina plan, estado del mes objetivo y aplica overrides
+  const target = suscMesLabel(suscMesIdx, suscAnio);
+  const list = [];
+  Object.keys(map).forEach(key => {
+    const m = map[key];
+    const ov = overrides[key] || {};
+    if (ov.excluir) return;
+    m.plan = ov.plan || m.declPlan || (m.pagos.some(p => /FACTURAC/.test(suscNorm(p.servicio))) ? "facturacion" : "otro");
+    // ¿pagó el mes objetivo?
+    const pagoMes = m.pagos.find(p => suscNorm(p.mesRecepcion) === suscNorm(target) || suscNorm(p.mesPago) === suscNorm(target));
+    m.alDia = !!pagoMes;
+    m.pagoMes = pagoMes || null;
+    m.importeMes = pagoMes ? (Number(pagoMes.importe) || 0) : 0;
+    // estado BD actual (si está en la base)
+    m.estadoBD = m.bd ? bdV(m.bd, "estado") : "";
+    list.push(m);
+  });
+  list.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || ""));
+  return list;
+}
+
+async function paintSuscripciones() {
+  const box = el("tar-body"); if (!box) return;
+  box.innerHTML = `<p class="lead"><span class="cx-spin"></span> Cargando suscripciones (cruzando pagos del mes)…</p>`;
+  const yr = String(suscAnio);
+  try {
+    await Promise.all([
+      (recLoadedGestion !== yr && recLoadedGestion !== "todas") ? recepLoad(yr) : Promise.resolve(),
+      new Promise(res => bdEnsureLoaded(() => res()))
+    ]);
+  } catch (e) {}
+  const cfg = await loadConfigDoc();
+  const overrides = cfg.suscOverrides || {};
+  suscRenderBody(box, overrides);
+}
+
+function suscRenderBody(box, overrides) {
+  const admin = isAdmin();
+  const puedeEditar = !!(ME && ["admin", "supervisor", "editor", "cajero"].includes(ME.role));
+  const target = suscMesLabel(suscMesIdx, suscAnio);
+  const hoy = new Date();
+  const esMesActual = (suscMesIdx === hoy.getMonth() && suscAnio === hoy.getFullYear());
+  const esFuturo = (suscAnio > hoy.getFullYear()) || (suscAnio === hoy.getFullYear() && suscMesIdx > hoy.getMonth());
+  const dia = hoy.getDate();
+  let LIST = suscBuild(overrides);
+  const total = LIST.length;
+  const alDia = LIST.filter(m => m.alDia);
+  const morosos = LIST.filter(m => !m.alDia);
+  const ingresos = alDia.reduce((s, m) => s + m.importeMes, 0);
+  const porPlan = {}; LIST.forEach(m => { porPlan[m.plan] = (porPlan[m.plan] || 0) + 1; });
+  // término de suspensión según el mes elegido
+  const etiquetaMoroso = esFuturo ? "Por renovar" : "Suspendido (sin pago)";
+
+  const mesSel = REC_MESES.map((m, i) => `<option value="${i}" ${i === suscMesIdx ? "selected" : ""}>${m.charAt(0) + m.slice(1).toLowerCase()}</option>`).join("");
+  const y2 = hoy.getFullYear();
+  const anioSel = [];
+  for (let y = y2 + 1; y >= 2023; y--) anioSel.push(`<option value="${y}" ${y === suscAnio ? "selected" : ""}>${y}</option>`);
+
+  // Nota de precio Standard según ventana de pago (hoy)
+  let notaStd = "";
+  if (esMesActual || esFuturo) {
+    if (dia >= 25 && dia <= 31) notaStd = `Hoy es día ${dia}: pago <b>anticipado (25–30)</b> → Standard <b>50 Bs</b> para el mes siguiente.`;
+    else if (dia >= 1 && dia <= 5) notaStd = `Hoy es día ${dia}: pago <b>regular (1–5)</b> → Standard <b>60 Bs</b>.`;
+    else notaStd = `Standard: <b>50 Bs</b> si paga del 25 al 30 (anticipado), <b>60 Bs</b> si paga del 1 al 5.`;
+  }
+
+  const planChips = Object.keys(SUSC_PLANES).filter(p => porPlan[p]).map(p =>
+    `<span style="display:inline-block;background:${SUSC_PLANES[p].color}22;color:${SUSC_PLANES[p].color};border:1px solid ${SUSC_PLANES[p].color}55;border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;margin:2px">${SUSC_PLANES[p].lbl}: ${porPlan[p]} · ${SUSC_PLANES[p].precio}</span>`).join("");
+
+  const term = suscFiltro.toLowerCase().trim();
+  const vistaList = (suscVista === "aldia" ? alDia : suscVista === "todos" ? LIST : morosos)
+    .filter(m => !term || `${m.nombre} ${m.nit} ${m.celular}`.toLowerCase().includes(term));
+
+  const planBadge = m => `<span style="background:${SUSC_PLANES[m.plan].color}22;color:${SUSC_PLANES[m.plan].color};border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600">${SUSC_PLANES[m.plan].lbl}</span>${m.repartidor ? ' <span style="background:#ff8c0022;color:#c76a00;border-radius:6px;padding:2px 6px;font-size:10px">repartidor</span>' : ''}`;
+
+  const filas = vistaList.map(m => {
+    const estadoTxt = m.alDia
+      ? `<span style="color:var(--ok,#1f8a4c);font-weight:600">✓ Al día</span>`
+      : `<span style="color:${esFuturo ? '#b8860b' : 'var(--danger)'};font-weight:600">${esFuturo ? '◷ ' : '⛔ '}${etiquetaMoroso}</span>`;
+    const tel = suscTelLimpio(m.celular);
+    const acc = !m.alDia && tel
+      ? `<button class="mini" data-wa="${escape(tel)}" data-nom="${escape(m.nombre)}" title="Abrir WhatsApp para avisarle">📲 Avisar</button>`
+      : (m.alDia && m.pagoMes ? `<span style="color:var(--muted);font-size:11px">${escape(m.pagoMes.fechaPago || "")} · Bs ${m.importeMes}</span>` : "");
+    return `<tr>
+      <td><b>${escape(m.nombre)}</b>${m.nit ? `<div style="color:var(--muted);font-size:11px">NIT ${escape(m.nit)}</div>` : ""}</td>
+      <td>${planBadge(m)}</td>
+      <td>${escape(m.celular || "—")}</td>
+      <td>${estadoTxt}${m.estadoBD ? `<div style="color:var(--muted);font-size:10px">BD: ${escape(m.estadoBD)}</div>` : ""}</td>
+      <td style="text-align:right;white-space:nowrap">${acc}${admin ? ` <button class="mini" data-ov="${escape(m.key)}" title="Cambiar plan / excluir">⚙</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+
+  box.innerHTML = `
+    <p class="lead">Control de suscripciones mensuales. El estado <b>al día / suspendido</b> se calcula automáticamente cruzando los pagos registrados en <b>Recepción</b> con el mes que eliges. Modalidad por <b>mes calendario</b>: el pago del 25 al 30 es anticipado y cubre el mes siguiente.</p>
+
+    <div class="toolbar" style="gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--muted)">Mes a controlar:</label>
+      <select id="su_mes" class="mini">${mesSel}</select>
+      <select id="su_anio" class="mini">${anioSel.join("")}</select>
+      <button class="mini" id="su_reload" title="Volver a leer los pagos">↻ Actualizar</button>
+      <span style="flex:1"></span>
+      <input id="su_search" class="mini" style="padding:9px;min-width:200px" placeholder="🔎 Buscar cliente…" value="${escape(suscFiltro)}">
+      <button class="btn sec" id="su_export" style="border:1px solid var(--line)" title="Descargar lista en Excel/CSV">⬇ Exportar</button>
+    </div>
+
+    <div class="kpis" style="margin:12px 0">
+      <div class="kpi"><div class="n">${total}</div><div class="l">Suscriptores</div></div>
+      <div class="kpi"><div class="n" style="color:var(--ok,#1f8a4c)">${alDia.length}</div><div class="l">Al día (${REC_MESES[suscMesIdx].toLowerCase()})</div></div>
+      <div class="kpi"><div class="n" style="color:${esFuturo ? '#b8860b' : 'var(--danger)'}">${morosos.length}</div><div class="l">${esFuturo ? 'Por renovar' : 'Suspendidos / sin pago'}</div></div>
+      <div class="kpi"><div class="n">Bs ${ingresos.toLocaleString("es-BO")}</div><div class="l">Cobrado del mes</div></div>
+    </div>
+    <div style="margin:4px 0 12px">${planChips || '<span style="color:var(--muted)">Aún no hay planes detectados.</span>'}</div>
+    ${notaStd ? `<p class="note" style="margin:0 0 12px">💡 ${notaStd}</p>` : ""}
+    ${esMesActual && morosos.length && puedeEditar ? `<p class="note" style="margin:0 0 12px;border-left:3px solid var(--danger);padding-left:10px">Hay <b>${morosos.length}</b> suscriptores sin pago de ${REC_MESES[suscMesIdx].toLowerCase()}. Puedes marcarlos a todos como “Servicio Suspendido” en la Base de Datos con un clic: <button class="mini" id="su_aplicar" style="margin-left:6px">⛔ Aplicar suspensión en la BD</button></p>` : ""}
+
+    <div class="subtabs" style="margin-bottom:8px">
+      <button class="subtab ${suscVista === 'morosos' ? 'on' : ''}" data-sv="morosos">${esFuturo ? 'Por renovar' : 'Suspendidos'} (${morosos.length})</button>
+      <button class="subtab ${suscVista === 'aldia' ? 'on' : ''}" data-sv="aldia">Al día (${alDia.length})</button>
+      <button class="subtab ${suscVista === 'todos' ? 'on' : ''}" data-sv="todos">Todos (${total})</button>
+    </div>
+
+    <table><thead><tr><th>Cliente</th><th>Plan</th><th>Celular</th><th>Estado del mes</th><th></th></tr></thead>
+    <tbody>${filas || `<tr><td colspan="5" style="color:var(--muted)">${total ? "Nadie en esta vista." : "No se encontraron pagos de suscripción en la gestión " + suscAnio + ". Registra pagos en Recepción o cambia el año."}</td></tr>`}</tbody></table>`;
+
+  // Eventos
+  el("su_mes").onchange = () => { suscMesIdx = parseInt(el("su_mes").value, 10); suscRenderBody(box, overrides); };
+  el("su_anio").onchange = () => { suscAnio = parseInt(el("su_anio").value, 10); paintSuscripciones(); };
+  el("su_reload").onclick = () => { recLoadedGestion = null; paintSuscripciones(); };
+  el("su_search").oninput = () => { suscFiltro = el("su_search").value; suscRenderBody(box, overrides); };
+  box.querySelectorAll(".subtab[data-sv]").forEach(b => b.onclick = () => { suscVista = b.dataset.sv; suscRenderBody(box, overrides); });
+  box.querySelectorAll("[data-wa]").forEach(b => b.onclick = () => suscAvisar(b.dataset.wa, b.dataset.nom));
+  box.querySelectorAll("[data-ov]").forEach(b => b.onclick = () => suscOverrideModal(b.dataset.ov, LIST.find(x => x.key === b.dataset.ov), overrides));
+  if (el("su_export")) el("su_export").onclick = () => {
+    const H = ["Cliente", "NIT", "Celular", "Correo", "Plan", "Precio", "Repartidor", "Estado del mes", "Pagó (fecha)", "Importe", "Estado BD"];
+    const rws = vistaList.map(m => [m.nombre, m.nit, m.celular, m.correo, SUSC_PLANES[m.plan].lbl, SUSC_PLANES[m.plan].precio, m.repartidor ? "Sí" : "No", m.alDia ? "Al día" : etiquetaMoroso, m.pagoMes ? (m.pagoMes.fechaPago || "") : "", m.importeMes || "", m.estadoBD]);
+    downloadCSV("CONTAX-Suscripciones-" + REC_MESES[suscMesIdx] + suscAnio + ".csv", H, rws);
+  };
+  if (el("su_aplicar")) el("su_aplicar").onclick = () => suscAplicarSuspension(morosos.filter(m => m.bd));
+}
+
+// Abre WhatsApp con un mensaje de aviso de renovación
+function suscAvisar(tel, nombre) {
+  const mes = REC_MESES[suscMesIdx].charAt(0) + REC_MESES[suscMesIdx].slice(1).toLowerCase();
+  const txt = `Hola ${nombre || ""}, le saluda CONTAX 👋. Le recordamos que su suscripción del mes de ${mes} está pendiente de pago. Para reactivar su servicio puede cancelar del 25 al 30 (tarifa anticipada) o del 1 al 5. ¡Gracias!`;
+  window.open("https://wa.me/" + tel + "?text=" + encodeURIComponent(txt), "_blank");
+}
+
+// Modal admin: cambiar plan o excluir a un cliente de las suscripciones
+function suscOverrideModal(key, m, overrides) {
+  if (!m) return;
+  const ov = overrides[key] || {};
+  const bg = document.createElement("div");
+  bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
+  const opts = Object.keys(SUSC_PLANES).map(p => `<option value="${p}" ${((ov.plan || m.plan) === p) ? "selected" : ""}>${SUSC_PLANES[p].lbl} (${SUSC_PLANES[p].precio})</option>`).join("");
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;width:440px;max-width:96vw">
+    <h3 style="margin:0 0 6px">Ajustar suscripción</h3>
+    <p style="color:var(--muted);margin:0 0 14px">${escape(m.nombre)}${m.nit ? " · NIT " + escape(m.nit) : ""}</p>
+    <div class="field"><label>Plan (forzar manualmente)</label><select id="ov_plan">${opts}</select>
+      <div style="color:var(--muted);font-size:12px;margin-top:4px">Normalmente el plan se detecta solo por el monto pagado. Úsalo solo si quieres corregirlo.</div></div>
+    <div class="field"><label><input type="checkbox" id="ov_excl" ${ov.excluir ? "checked" : ""} style="width:auto;margin-right:6px">No es suscriptor (excluir de esta lista)</label></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn sec" id="ov_cancel">Cancelar</button>
+      <button class="btn" id="ov_save">Guardar</button>
+    </div><div class="msg" id="ov_msg"></div></div>`;
+  document.body.appendChild(bg);
+  const close = () => bg.remove();
+  bg.onclick = e => { if (e.target === bg) close(); };
+  bg.querySelector("#ov_cancel").onclick = close;
+  bg.querySelector("#ov_save").onclick = async () => {
+    const nuevo = Object.assign({}, overrides);
+    nuevo[key] = { plan: bg.querySelector("#ov_plan").value, excluir: bg.querySelector("#ov_excl").checked };
+    if (!nuevo[key].excluir && nuevo[key].plan === (m.declPlan || "")) delete nuevo[key].plan;
+    const btn = bg.querySelector("#ov_save"); btn.disabled = true; btn.textContent = "Guardando…";
+    try {
+      await setDoc(doc(db, "config", "app"), { suscOverrides: nuevo, updatedAt: serverTimestamp() }, { merge: true });
+      close(); paintSuscripciones();
+    } catch (e) { btn.disabled = false; btn.textContent = "Guardar"; bg.querySelector("#ov_msg").className = "msg err"; bg.querySelector("#ov_msg").textContent = "Error: " + (e.code || e.message) + " (solo el administrador puede ajustar planes)."; }
+  };
+}
+
+// Marca en la Base de Datos (bdclientes) a los morosos del mes como suspendidos, de una vez
+async function suscAplicarSuspension(morosos) {
+  if (!morosos.length) { alert("No hay morosos con ficha en la Base de Datos para suspender."); return; }
+  const ESTADO = "SUSCRIPCIÓN INACTIVA";
+  if (!confirm(`Se marcará a ${morosos.length} cliente(s) como "${ESTADO}" en la Base de Datos (los que no pagaron ${REC_MESES[suscMesIdx].toLowerCase()}).\n\nEsto cambia su estado y queda en el registro de Movimientos. ¿Continuar?`)) return;
+  const btn = el("su_aplicar"); if (btn) { btn.disabled = true; btn.textContent = "Aplicando…"; }
+  let ok = 0, err = 0;
+  for (const m of morosos) {
+    try {
+      const estAnt = bdV(m.bd, "estado");
+      if (suscNorm(estAnt) === suscNorm(ESTADO)) { ok++; continue; }
+      const hdr = (bdKey2Header && bdKey2Header["estado"]) || BD_KEY2LBL["estado"];
+      const itemByHeader = {}; itemByHeader[hdr] = ESTADO; itemByHeader["_bajaISO"] = new Date().toISOString();
+      const done = await bdSave({}, bdV(m.bd, "codigoId"), itemByHeader, m.bd._docid);
+      if (done) { ok++; bdLog({ accion: "cambio_estado", nombre: m.nombre, estadoAnterior: estAnt, estadoNuevo: ESTADO }); }
+      else err++;
+    } catch (e) { err++; }
+  }
+  bdLoaded = false;
+  if (btn) { btn.disabled = false; btn.textContent = "⛔ Aplicar suspensión en la BD"; }
+  alert(`Listo: ${ok} suspendido(s)${err ? ", " + err + " con error" : ""}. Se actualizó la Base de Datos y el registro de Movimientos.`);
+  paintSuscripciones();
+}
 
 // ============================================================
 //  MÓDULO ASISTENTE IA (Panel) — chat para todo el equipo
