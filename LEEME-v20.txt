@@ -1,0 +1,52 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v20
+===============================================================
+
+1) INICIO más limpio
+   El logo de NUMMEROS ahora se ve grande y centrado en la pantalla.
+   Se quitaron los recuadros de "Clientes" y "Activos" y el botón
+   "Ir a Clientes".
+
+2) RELOJ Y FECHA EN LA BARRA SUPERIOR
+   Arriba a la derecha ahora se ve la hora y la fecha actuales.
+
+3) SUSCRIPCIONES — solo clientes activos + reactivación automática
+   • Los que están como "CLIENTE INACTIVO" (o lista negra / suspendidos)
+     YA NO aparecen en la lista de Suscripciones. Solo ves a los activos,
+     así el control es más limpio.
+   • Cuando registras un pago de un cliente que estaba dado de baja en la
+     Base de Datos, el sistema lo vuelve a poner ACTIVO automáticamente
+     (y queda en el registro de Movimientos).
+   • Los morosos (que no pagaron) siguen apareciendo como un estado "por
+     encima" (Suspendido) SIN cambiar la base, y recién pasan a
+     CLIENTE INACTIVO cuando tocas "Aplicar suspensión en la BD".
+
+4) RECEPCIÓN — estado del cliente a la vista
+   Al elegir el cliente, debajo del buscador se muestra su ESTADO actual.
+   Si está dado de baja, aparece un botón "Marcar ACTIVO" para reactivarlo
+   al instante. Y, como se dijo arriba, al registrarle un pago se reactiva
+   solo.
+
+5) LECTOR DE COMPROBANTE más resistente (error 503 de Gemini)
+   Cuando Gemini responde "high demand (503)", el lector ahora REINTENTA
+   solo (hasta 3 veces, y probando otros modelos) antes de rendirse, con
+   un mensaje más claro. Esto reduce muchísimo las fallas por demanda.
+   (Sobre pagar: ver la nota del chat — con el plan gratis suele alcanzar;
+   el costo de leer comprobantes es muy bajo.)
+
+6) TARIFAS — botón "Cargar planes CONTAX"
+   En Tarifas → Catálogo de servicios, el administrador tiene el botón
+   "⬆ Cargar planes CONTAX" que inserta de una vez los planes que
+   definimos: Declaración Básico 30, Standard 50/60, Premium 95,
+   Facturación 20, Trámites y Balances. Después puedes editarlos.
+   (No pude cargarlos yo directamente porque no tengo acceso a tu
+   Firebase; con este botón los cargas tú en un clic.)
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v20 (súbelo a GitHub)
+ - LEEME-v20.txt
+Sin cambios en las reglas de Firestore.
+El arreglo del lector de comprobante (503 + clave sin "AIza") también va
+en el CRM (paquete acumulado para Edge).
+===============================================================

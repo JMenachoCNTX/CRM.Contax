@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "19";
+const APP_VERSION = "20";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -38,6 +38,16 @@ function initSidebar() {
 function initFab() {
   const f = el("cxFab"); if (!f) return;
   f.onclick = () => { const btn = document.querySelector('nav.tabs button[data-v="asistente"]'); if (btn) btn.click(); };
+}
+let cxClockTimer = null;
+function initClock() {
+  const upd = () => {
+    const d = new Date();
+    const t = el("cxClockTime"), f = el("cxClockDate");
+    if (t) t.textContent = d.toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" });
+    if (f) f.textContent = d.toLocaleDateString("es-BO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  };
+  upd(); if (cxClockTimer) clearInterval(cxClockTimer); cxClockTimer = setInterval(upd, 15000);
 }
 
 // ---------- Login ----------
@@ -147,6 +157,7 @@ onAuthStateChanged(auth, async (user) => {
   initTheme();
   initSidebar();
   initFab();
+  initClock();
   const first = buildNav();
   if (first) switchView(first.dataset.v, first);
 });
@@ -189,34 +200,15 @@ function switchView(v, btn) {
 
 // ---------- Inicio (portal home) ----------
 async function renderInicio() {
-  let nCli = "—", nAct = "—";
-  try {
-    const snap = await getDocs(collection(db, "clientes"));
-    let t = 0, a = 0;
-    snap.forEach(d => { t++; if (/^activo/i.test(String((d.data().estadoUsuario) || "").trim())) a++; });
-    nCli = t; nAct = a;
-  } catch (e) {}
   const hora = new Date().getHours();
   const saludo = hora < 12 ? "Buenos días" : (hora < 19 ? "Buenas tardes" : "Buenas noches");
   const nombre = escape((ME.name || ME.email || "").split(" ")[0] || "");
   el("v-inicio").innerHTML = `
-    <div style="position:relative;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:48px 28px;min-height:340px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
-      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--txt);opacity:.05;pointer-events:none">
-        <div style="width:min(90%,720px)">${LOGO_BYC}</div>
-      </div>
-      <div style="position:relative;z-index:1;max-width:560px">
-        <div style="color:var(--txt);width:min(70%,320px);margin:0 auto 22px">${LOGO_BYC}</div>
-        <h1 style="font-size:24px;margin:0 0 6px">${saludo}, ${nombre}.</h1>
-        <p class="lead" style="margin:0 0 26px">Bienvenido a tu sistema NUMMEROS by CONTAX. Estás en <b>${escape(ME.role || "")}</b>.</p>
-        <div class="kpis" style="max-width:420px;margin:0 auto 26px">
-          <div class="kpi"><div class="n">${nCli}</div><div class="l">Clientes</div></div>
-          <div class="kpi"><div class="n">${nAct}</div><div class="l">Activos</div></div>
-        </div>
-        <button class="btn" id="ini_clientes">Ir a Clientes →</button>
-      </div>
+    <div style="position:relative;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:40px 24px;min-height:min(72vh,620px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+      <div style="color:var(--txt);width:min(86%,680px);margin:0 auto 10px">${LOGO_BYC}</div>
+      <h1 style="font-size:22px;margin:18px 0 6px;font-weight:600">${saludo}, ${nombre}.</h1>
+      <p class="lead" style="margin:0;color:var(--muted)">Bienvenido a tu sistema NUMMEROS by CONTAX.</p>
     </div>`;
-  const go = el("ini_clientes");
-  if (go) go.onclick = () => { const b = document.querySelector('nav.tabs button[data-v="basedatos"]'); if (b && !b.classList.contains("hidden")) switchView("basedatos", b); };
 }
 
 // ---------- Respuestas rápidas (CRUD + Google Sheets) ----------
@@ -1697,6 +1689,7 @@ function paintTarifas() {
     <div class="toolbar">
       <input id="tar_search" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar servicio…" value="${escape(tarFilter)}">
       ${admin ? '<button class="btn" id="tar_new">＋ Nuevo servicio</button>' : ''}
+      ${admin ? '<button class="btn sec" id="tar_seed" style="border:1px solid var(--line)" title="Carga los planes de CONTAX (Básico, Standard, Premium, Facturación, Trámites, Balances)">⬆ Cargar planes CONTAX</button>' : ''}
       <button class="btn sec" id="tar_export" style="border:1px solid var(--line)" title="Descargar respaldo en CSV">⬇ Exportar</button>
       <span class="msg" id="tar_msg" style="align-self:center"></span>
     </div>
@@ -1709,8 +1702,36 @@ function paintTarifas() {
     downloadCSV("CONTAX-Tarifas-" + hoyISO() + ".csv", H, rws);
   };
   if (el("tar_new")) el("tar_new").onclick = () => openTarifaModal(null);
+  if (el("tar_seed")) el("tar_seed").onclick = seedTarifasContax;
   el("v-tarifas").querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openTarifaModal(TARIFAS.find(x => x.id === b.dataset.edit)));
   el("v-tarifas").querySelectorAll("[data-del]").forEach(b => b.onclick = () => delTarifa(TARIFAS.find(x => x.id === b.dataset.del)));
+}
+// Planes de CONTAX (según la información dada) para cargar de una vez
+const CONTAX_TARIFAS = [
+  { id: "contax-decl-basico", nombre: "Declaración Mensual — Básico", categoria: "Declaración Mensual", tipo: "declaracion", precio: 30, plazo: "", descripcion: "Declaración jurada SIN movimiento (no se ingresan las facturas electrónicas del portal). Incluye facturación. Tarifa especial para repartidores (YANGO, PedidosYa, TADA, ToGo, Turbo).", activo: true },
+  { id: "contax-decl-standard", nombre: "Declaración Mensual — Standard", categoria: "Declaración Mensual", tipo: "declaracion", precio: 50, precioTexto: "50 Bs (paga 25–30) / 60 Bs (paga 1–5)", plazo: "", descripcion: "Declaración con hasta 100 facturas (electrónicas + manuales en total). Incluye emisión de facturas. 50 Bs si recepciona del 25 al 30 (anticipado), 60 Bs si paga del 1 al 5. Tarifa especial para repartidores.", activo: true },
+  { id: "contax-decl-premium", nombre: "Declaración Mensual — Premium", categoria: "Declaración Mensual", tipo: "declaracion", precio: 95, plazo: "", descripcion: "Igual que Standard (hasta 100 facturas, incluye emisión de facturas) pero para empresas unipersonales que NO son repartidores.", activo: true },
+  { id: "contax-facturacion", nombre: "Facturación (suscripción)", categoria: "Facturación", tipo: "facturacion", precio: 20, plazo: "", descripcion: "Solo emisión de facturas durante todo el mes.", activo: true },
+  { id: "contax-tramites", nombre: "Trámites", categoria: "Trámites", tipo: "tramite", precio: null, precioTexto: "Según el trámite", plazo: "", descripcion: "Trámites varios (matrículas, ROE, SEPREC, actualizaciones). No es suscripción: se cobra por trámite.", activo: true },
+  { id: "contax-balance", nombre: "Balance / Estados Financieros (EEFF)", categoria: "Balances", tipo: "eeff", precio: null, precioTexto: "Según la empresa", plazo: "", descripcion: "Elaboración de balances / estados financieros por gestión. No es suscripción: se cobra por trabajo.", activo: true }
+];
+async function seedTarifasContax() {
+  if (!isAdmin()) return;
+  const msg = el("tar_msg");
+  if (!confirm("Se cargarán los planes de CONTAX (Básico 30, Standard 50/60, Premium 95, Facturación 20, Trámites y Balances). Si ya existían, se actualizan. ¿Continuar?")) return;
+  const btn = el("tar_seed"); if (btn) { btn.disabled = true; btn.textContent = "Cargando…"; }
+  try {
+    for (const t of CONTAX_TARIFAS) {
+      const { id, ...data } = t;
+      data.updatedAt = serverTimestamp();
+      await setDoc(doc(db, "tarifas", id), data, { merge: true });
+    }
+    await tarLoad(); await saveTarifasText(); paintTarifas();
+    const m = el("tar_msg"); if (m) { m.className = "msg ok"; m.textContent = "✓ Planes de CONTAX cargados. Puedes editarlos cuando quieras."; }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = "⬆ Cargar planes CONTAX"; }
+    const m = el("tar_msg"); if (m) { m.className = "msg err"; m.textContent = "Error: " + (e.code || e.message) + " (solo el administrador puede cargarlos)."; }
+  }
 }
 function openTarifaModal(t) {
   const bg = document.createElement("div");
@@ -1869,6 +1890,9 @@ function suscBuild(overrides) {
     const m = map[key];
     const ov = overrides[key] || {};
     if (ov.excluir) return;
+    // Estado en la BD; ocultamos a los dados de baja (CLIENTE INACTIVO / lista negra / suspendidos)
+    m.estadoBD = m.bd ? bdV(m.bd, "estado") : "";
+    if (m.bd && esBaja(m.estadoBD)) return;
     m.plan = ov.plan || m.declPlan || (m.pagos.some(p => /FACTURAC/.test(suscNorm(p.servicio))) ? "facturacion" : "otro");
     // ¿pagó el ciclo del mes objetivo? (ciclo por fecha de pago: 25-30 = mes siguiente)
     const pagoMes = m.pagos.find(p => { const c = suscCicloDe(p); return c && c.mes === suscMesIdx && c.anio === suscAnio; });
@@ -2390,6 +2414,7 @@ function paintRecepcion() {
     const formHTML = !canEdit ? '<div class="note">Tu rol puede ver la recepción pero no registrar.</div>' : `
       <div class="formcard" style="max-width:none">
         <div class="field"><label>Cliente (escribe para buscar)</label><input id="r_clibusca" list="r_cli_dl" placeholder="Escribe el nombre o código y elige de la lista" autocomplete="off"><datalist id="r_cli_dl">${cliDL}</datalist></div>
+        <div id="r_estado_box" style="margin:-4px 0 6px"></div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:22px;align-items:start;margin-top:6px">
 
           <div>
@@ -2502,6 +2527,7 @@ function paintRecepcion() {
           recFill("r_nombre", bdV(c, "nombre") || bdV(c, "razon")); recFill("r_nit", bdV(c, "nit")); recFill("r_ult", nitUltimo(bdV(c, "nit")));
           recFill("r_rubro", bdV(c, "brinda")); recFill("r_idcli", bdV(c, "codigoId"));
           recFill("r_correo", bdV(c, "correo")); recFill("r_cel", bdV(c, "celular"));
+          recPintarEstado();
         }
       };
       // Servicio → detalle dependiente + período según categoría
@@ -2561,6 +2587,39 @@ function paintRecepcion() {
     }
   });
 }
+// Si el cliente de la BD está dado de baja, lo pone ACTIVO (y lo registra en Movimientos)
+async function recReactivarSiInactivo(cli) {
+  if (!cli || !cli._docid) return false;
+  const est = bdV(cli, "estado");
+  if (!est || !esBaja(est)) return false;
+  const hdr = (bdKey2Header && bdKey2Header["estado"]) || BD_KEY2LBL["estado"];
+  const itemByHeader = {}; itemByHeader[hdr] = "ACTIVO";
+  const ok = await bdSave({}, bdV(cli, "codigoId"), itemByHeader, cli._docid);
+  if (ok) {
+    try { cli[hdr] = "ACTIVO"; } catch (e) {}
+    bdLoaded = false;
+    bdLog({ accion: "cambio_estado", nombre: bdV(cli, "nombre") || bdV(cli, "razon"), estadoAnterior: est, estadoNuevo: "ACTIVO" });
+    return true;
+  }
+  return false;
+}
+// Pinta el estado del cliente seleccionado en el formulario, con botón para reactivar
+function recPintarEstado() {
+  const box = el("r_estado_box"); if (!box) return;
+  if (!recCli) { box.innerHTML = ""; return; }
+  const info = bdEstadoInfo(recCli);
+  const est = info.raw || "—";
+  const cls = info.cls === "ok" ? "ok" : (info.cls === "danger" ? "danger" : "off");
+  const baja = esBaja(est);
+  box.innerHTML = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">
+    <span style="color:var(--muted)">Estado:</span> <span class="badge ${cls}">${escape(est)}</span>
+    ${baja ? `<button type="button" class="mini" id="r_setactivo" title="Cambiar a ACTIVO en la Base de Datos">Marcar ACTIVO</button>` : ""}</div>`;
+  if (el("r_setactivo")) el("r_setactivo").onclick = async () => {
+    const b = el("r_setactivo"); b.disabled = true; b.textContent = "…";
+    const ok = await recReactivarSiInactivo(recCli);
+    if (ok) recPintarEstado(); else { b.disabled = false; b.textContent = "Marcar ACTIVO"; }
+  };
+}
 async function registrarRecepcion() {
   const msg = el("r_msg");
   const nombre = el("r_nombre").value.trim();
@@ -2603,9 +2662,12 @@ async function registrarRecepcion() {
       enviado = await postRecibo(rec);
       if (enviado) { try { await setDoc(doc(db, "recepciones", ref.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} rec.reciboEnviado = true; }
     }
+    // Si el cliente estaba dado de baja en la BD, al pagar lo reactivamos a ACTIVO
+    let reactivado = false;
+    try { reactivado = await recReactivarSiInactivo(recCli); } catch (e) {}
     // Inserción inmediata en la lista (no dependemos de releer todo)
     RECEP.unshift(Object.assign({}, rec));
-    recFlash = `✓ Recepción N° ${nroRec} registrada` + (rec.clienteCorreo ? (enviado ? " y Orden enviada al correo." : " (no se pudo enviar el PDF; revisa la URL de recibos en Configuración).") : " (el cliente no tiene correo: no se envió PDF).") + ` — míralo en la pestaña "Lista".`;
+    recFlash = (reactivado ? `✓ Cliente reactivado a ACTIVO. ` : "") + `✓ Recepción N° ${nroRec} registrada` + (rec.clienteCorreo ? (enviado ? " y Orden enviada al correo." : " (no se pudo enviar el PDF; revisa la URL de recibos en Configuración).") : " (el cliente no tiene correo: no se envió PDF).") + ` — míralo en la pestaña "Lista".`;
     recLastRec = rec;
     recCli = null; recComprobante = null; recCompData = null;
     paintRecepcion();
@@ -2708,24 +2770,30 @@ async function ocrComprobanteGemini(dataUrl) {
   const body = JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: b64 } }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 600 } });
   const baseModel = /gemini/i.test(cfg.aiModel || cfg.geminiModel || "") ? (cfg.aiModel || cfg.geminiModel) : "gemini-2.5-flash";
   const models = [baseModel, ...CX_GEMINI_FALLBACKS].filter((m, i, a) => m && a.indexOf(m) === i && /gemini/i.test(m));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let lastErr = "";
   for (const model of models) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
-      if (res.ok) {
-        const data = await res.json();
-        let txt = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || []).map(p => p.text).join("") || "").trim();
-        txt = txt.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "").trim();
-        let obj = {}; try { obj = JSON.parse(txt); } catch (e) { const m = txt.match(/\{[\s\S]*\}/); if (m) { try { obj = JSON.parse(m[0]); } catch (_) {} } }
-        if (!obj || typeof obj !== "object") return { error: "No se pudo interpretar el comprobante." };
-        return { data: obj };
-      }
-      let d = ""; try { d = (await res.json()).error.message || ""; } catch (e) {}
-      lastErr = `(${res.status}) ${d}`;
-      if (!(res.status === 404 || /not found|not supported/i.test(d))) break;
-    } catch (e) { lastErr = String(e.message || e); }
+    // Hasta 3 intentos por modelo ante sobrecarga (503) o límite momentáneo (429/500)
+    for (let intento = 0; intento < 3; intento++) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (res.ok) {
+          const data = await res.json();
+          let txt = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || []).map(p => p.text).join("") || "").trim();
+          txt = txt.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "").trim();
+          let obj = {}; try { obj = JSON.parse(txt); } catch (e) { const m = txt.match(/\{[\s\S]*\}/); if (m) { try { obj = JSON.parse(m[0]); } catch (_) {} } }
+          if (!obj || typeof obj !== "object") return { error: "No se pudo interpretar el comprobante." };
+          return { data: obj };
+        }
+        let d = ""; try { d = (await res.json()).error.message || ""; } catch (e) {}
+        lastErr = `(${res.status}) ${d}`;
+        if (res.status === 503 || res.status === 429 || res.status === 500) { await sleep(1200 * (intento + 1)); continue; } // reintenta
+        if (res.status === 404 || /not found|not supported/i.test(d)) break; // prueba otro modelo
+        return { error: "No se pudo leer el comprobante. " + lastErr }; // error definitivo
+      } catch (e) { lastErr = String(e.message || e); await sleep(800); }
+    }
   }
-  return { error: "No se pudo leer el comprobante. " + lastErr };
+  return { error: "La IA está con mucha demanda en este momento. Vuelve a tocar “Leer con IA” en unos segundos (o escribe los datos a mano). Detalle: " + lastErr };
 }
 
 let egComprobante = null, egCompData = null;
