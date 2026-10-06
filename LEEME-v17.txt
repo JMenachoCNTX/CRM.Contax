@@ -1,0 +1,71 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v17
+ Accesos, secciones del menú, permisos por rol,
+ Configuración ordenada y Egresos con lector IA
+===============================================================
+
+1) POR QUÉ ALGUIEN NO PODÍA ENTRAR AL RESTABLECER LA CLAVE
+   Restablecer la contraseña (por correo o desde Firebase) SOLO cambia la
+   contraseña. NO da acceso por sí solo. Para entrar al panel, el usuario
+   necesita en su perfil:
+     • un ROL del panel: Admin, Supervisor, Editor, Cajero o Lector
+       (el rol "Agente" es solo para la extensión de WhatsApp), y
+     • estar ACTIVO.
+   Si el usuario se creó directo en Firebase (no desde "Usuarios"), no
+   tiene perfil y el sistema antes lo rebotaba sin explicar. Ahora:
+     • Si entra pero no tiene perfil → le aparece un mensaje claro
+       pidiéndole que el administrador lo dé de alta con ese mismo correo.
+     • Si está inactivo o es "Agente" → le dice exactamente eso y qué pedir.
+   En "Usuarios" ya puedes asignar cualquiera de los 5 roles del panel
+   (antes solo salían Agente/Supervisor/Admin), activar/desactivar y
+   enviar el correo de "Restablecer".
+
+   SOLUCIÓN para los que no entran: ve a Usuarios, ponles un rol del panel
+   (ej. Cajero o Editor) y actívalos. Si no tienen perfil, créalos ahí con
+   su mismo correo.
+
+2) MENÚ ORGANIZADO EN SECCIONES (apartados)
+     • PORTAL: Inicio, Dashboard, Clientes, Tarifas, Calendario
+     • FINANZAS: Recepción, Arqueo, Egresos
+     • LISTAS: Declaraciones, Trámites, Estados Fin. (EEFF)
+     • CRM: Bandeja, Respuestas
+     • REPORTES: Presencia, Historial, Reportes
+     • ADMINISTRACIÓN: Asistente IA, Configuración, Usuarios, Importar
+   Si un rol no tiene pestañas de una sección, esa sección ni se muestra.
+
+3) PERMISOS POR ROL (Usuarios → al final, solo Admin)
+   Una tabla para marcar qué pestañas ve cada rol. Admin siempre ve todo.
+   Trae valores por defecto (puedes ajustarlos y guardar; o "Restaurar
+   valores por defecto"):
+     • Supervisor: todo.
+     • Editor: Clientes, Tarifas, Calendario, Listas, Asistente IA.
+     • Cajero: Clientes, Finanzas (Recepción/Arqueo/Egresos), Calendario, IA.
+     • Lector: solo lectura de Portal, Listas y Reportes.
+   Al guardar, cada usuario verá solo lo marcado para su rol.
+   (La edición/borrado sigue protegida por rol y por las reglas de
+   Firestore; esto controla lo que se VE.)
+
+4) CONFIGURACIÓN EN SUBPESTAÑAS
+   Antes era una lista larguísima. Ahora está en: IA · Empresa ·
+   Conexiones · Recepción · Conocimiento IA. Más fácil de encontrar todo.
+
+5) EGRESOS CON LECTOR DE COMPROBANTE (IA)
+   En el formulario de nuevo egreso hay un bloque "📷 Comprobante":
+   tomas o subes la foto (en el celular abre la cámara), tocas
+   "🤖 Leer comprobante con IA" y Gemini llena el IMPORTE y el DETALLE
+   (banco, depositante, N° de operación). Tú solo eliges la CUENTA
+   CONTABLE y registras. Usa la misma clave de Gemini para comprobantes
+   que configuraste en el CRM (Configuración → IA). Los datos del
+   comprobante se guardan con el egreso (la foto no se almacena, para no
+   llenar la base).
+
+PRÓXIMO (v18): Conectar el Calendario con Google Calendar (verlo en el
+celular, invitar al cliente, eventos repetitivos). Para eso tendrás que
+crear UNA credencial gratis en Google Cloud; te paso los pasos.
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v17 (súbelo a GitHub)
+ - LEEME-v17.txt
+Sin cambios en las reglas de Firestore (siguen las de v15 con bdlog).
+===============================================================

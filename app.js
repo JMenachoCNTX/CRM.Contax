@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "16";
+const APP_VERSION = "17";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -54,43 +54,100 @@ function traducir(c) { return ({ "auth/invalid-credential": "Correo o contraseñ
 el("logoutBtn").onclick = () =>signOut(auth);
 el("agentLogout").onclick = () =>signOut(auth);
 
-// ---------- Roles y permisos del portal ----------
-// groups: 'portal' (Clientes…) · 'crm' (Presencia/Bandeja/Respuestas/Reportes) · 'admin' (Usuarios/Config)
-// clientes: 'edit' = crear/editar · 'view' = solo lectura
-const ROLE_ACCESS = {
-  admin:      { groups: ["portal", "crm", "admin"], clientes: "edit" },
-  supervisor: { groups: ["portal", "crm", "admin"], clientes: "edit" },
-  editor:     { groups: ["portal"], clientes: "edit" },
-  cajero:     { groups: ["portal"], clientes: "edit" },
-  lector:     { groups: ["portal"], clientes: "view" }
+// ---------- Roles, secciones y permisos del portal ----------
+// Secciones del menú (apartados) y las pestañas (views) que contienen
+const NAV_SECTIONS = [
+  { key: "portal",   label: "PORTAL",          views: ["inicio", "dashboard", "basedatos", "tarifas", "calendario"] },
+  { key: "finanzas", label: "FINANZAS",        views: ["recepcion", "arqueo", "egresos"] },
+  { key: "listas",   label: "LISTAS",          views: ["declaraciones", "tramites", "eeff"] },
+  { key: "crm",      label: "CRM",             views: ["bandeja", "respuestas"] },
+  { key: "reportes", label: "REPORTES",        views: ["presence", "historial", "reports"] },
+  { key: "admin",    label: "ADMINISTRACIÓN",  views: ["asistente", "config", "users", "importar"] }
+];
+const VIEW_LABELS = {
+  inicio: "Inicio", dashboard: "Dashboard", basedatos: "Clientes", tarifas: "Tarifas y Suscripciones", calendario: "Calendario",
+  recepcion: "Recepción", arqueo: "Arqueo", egresos: "Egresos",
+  declaraciones: "Declaraciones", tramites: "Trámites", eeff: "Estados Fin. (EEFF)",
+  bandeja: "Bandeja", respuestas: "Respuestas",
+  presence: "Presencia", historial: "Historial", reports: "Reportes",
+  asistente: "Asistente IA", config: "Configuración", users: "Usuarios", importar: "Importar"
 };
-function myAccess() { return ROLE_ACCESS[ME && ME.role] || null; }
-function canEditClientes() { const a = myAccess(); return !!a && a.clientes === "edit"; }
-function isAdmin() { const a = myAccess(); return !!a && a.groups.includes("admin"); }
+const ALL_VIEWS = NAV_SECTIONS.reduce((a, s) => a.concat(s.views), []);
+const PORTAL_ROLES = ["admin", "supervisor", "editor", "cajero", "lector"];
+const ROLE_LABELS = { admin: "Admin", supervisor: "Supervisor", editor: "Editor", cajero: "Cajero", lector: "Lector", agent: "Agente (extensión)" };
+// Visibilidad por defecto por rol (editable en Panel → Usuarios → Permisos)
+const DEFAULT_ROLE_VIEWS = {
+  admin: ALL_VIEWS.slice(),
+  supervisor: ALL_VIEWS.slice(),
+  editor: ["inicio", "basedatos", "tarifas", "calendario", "declaraciones", "tramites", "eeff", "asistente"],
+  cajero: ["inicio", "basedatos", "recepcion", "arqueo", "egresos", "calendario", "asistente"],
+  lector: ["inicio", "dashboard", "basedatos", "tarifas", "calendario", "declaraciones", "tramites", "eeff", "presence", "historial", "reports"]
+};
+let ROLE_VIEWS = null; // se carga de config/app.rolePerms; si no, usa los defaults
+function roleViewsFor(role) {
+  const custom = ROLE_VIEWS && ROLE_VIEWS[role];
+  if (custom && Array.isArray(custom)) return custom;
+  return DEFAULT_ROLE_VIEWS[role] || [];
+}
+function canSeeView(v) { if (!ME) return false; if (ME.role === "admin") return true; return roleViewsFor(ME.role).indexOf(v) >= 0; }
+function isAdmin() { return !!(ME && (ME.role === "admin" || ME.role === "supervisor")); }
+function isAdminStrict() { return !!(ME && ME.role === "admin"); }
+function canEditClientes() { return !!(ME && ["admin", "supervisor", "editor", "cajero"].indexOf(ME.role) >= 0); }
+function roleOptionsHTML(cur) {
+  const order = ["admin", "supervisor", "editor", "cajero", "lector", "agent"];
+  return order.map(r => `<option value="${r}" ${cur === r ? "selected" : ""}>${ROLE_LABELS[r]}</option>`).join("");
+}
+
+function buildNav() {
+  let first = null;
+  document.querySelectorAll('nav.tabs button').forEach(b => {
+    const ok = canSeeView(b.dataset.v);
+    b.classList.toggle("hidden", !ok);
+    b.classList.remove("active");
+    b.onclick = () => switchView(b.dataset.v, b);
+    if (ok && !first) first = b;
+  });
+  // Ocultar el encabezado de una sección si no tiene ninguna pestaña visible
+  document.querySelectorAll('nav.tabs .navgroup[data-sec]').forEach(h => {
+    const sec = h.dataset.sec;
+    const any = [...document.querySelectorAll(`nav.tabs button[data-sec="${sec}"]`)].some(b => !b.classList.contains("hidden"));
+    h.classList.toggle("hidden", !any);
+  });
+  return first;
+}
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) { el("login").classList.remove("hidden"); el("app").classList.add("hidden"); el("agentOnly").classList.add("hidden"); return; }
-  const snap = await getDoc(doc(db, "users", user.uid));
-  if (!snap.exists()) { el("loginMsg").className = "msg err"; el("loginMsg").textContent = "Sin perfil."; await signOut(auth); return; }
-  ME = { uid: user.uid, ...snap.data() };
-  const access = myAccess();
+  let snap;
+  try { snap = await getDoc(doc(db, "users", user.uid)); } catch (e) { snap = null; }
   el("login").classList.add("hidden");
-  // Sin acceso al portal (agente de la extensión, o rol desconocido, o inactivo) → pantalla de agente
-  if (!access || ME.active !== true) { el("agentOnly").classList.remove("hidden"); el("app").classList.add("hidden"); return; }
+  // 1) La cuenta existe en Firebase pero NO tiene perfil en el sistema
+  if (!snap || !snap.exists()) {
+    el("app").classList.add("hidden"); el("agentOnly").classList.remove("hidden");
+    const r = el("agentReason");
+    if (r) r.innerHTML = `Tu cuenta <b>${escape(user.email || "")}</b> entró correctamente, pero <b>no tiene perfil en el sistema</b>. Esto NO es problema de contraseña.<br><br>Pídele al administrador que te dé de alta desde <b>Usuarios</b> con tu mismo correo (o, si el administrador eres tú, créalo ahí).`;
+    return;
+  }
+  ME = { uid: user.uid, ...snap.data() };
+  // Cargar permisos por rol configurados (si existen)
+  try { const c = await loadConfigDoc(); ROLE_VIEWS = c.rolePerms || null; } catch (e) { ROLE_VIEWS = null; }
+  // 2) Perfil sin acceso al portal: rol de agente / rol desconocido / inactivo
+  if (ME.active !== true || PORTAL_ROLES.indexOf(ME.role) < 0) {
+    el("app").classList.add("hidden"); el("agentOnly").classList.remove("hidden");
+    const r = el("agentReason");
+    if (r) {
+      if (ME.active !== true) r.innerHTML = `Tu cuenta <b>${escape(ME.email || "")}</b> está <b>inactiva</b>. Esto NO es problema de contraseña.<br><br>Pídele al administrador que te <b>active</b> desde <b>Usuarios</b>.`;
+      else r.innerHTML = `Tu cuenta <b>${escape(ME.email || "")}</b> tiene el rol <b>${escape(ROLE_LABELS[ME.role] || ME.role || "—")}</b>, que trabaja desde la <b>extensión</b> de WhatsApp, no desde este panel.<br><br>Si necesitas entrar al panel, pídele al administrador que te asigne un rol del portal (Admin, Supervisor, Editor, Cajero o Lector) desde <b>Usuarios</b>.`;
+    }
+    return;
+  }
+  // 3) Acceso OK
   el("agentOnly").classList.add("hidden"); el("app").classList.remove("hidden");
-  el("who").textContent = `${ME.name || ME.email} · ${ME.role}`;
+  el("who").textContent = `${ME.name || ME.email} · ${ROLE_LABELS[ME.role] || ME.role}`;
   initTheme();
   initSidebar();
   initFab();
-  // Mostrar solo las pestañas que el rol puede ver; elegir la primera visible como activa
-  let first = null;
-  document.querySelectorAll('nav.tabs button').forEach(b => {
-    const ok = access.groups.includes(b.dataset.grp);
-    b.classList.toggle("hidden", !ok);
-    b.classList.remove("active");
-    b.onclick = () =>switchView(b.dataset.v, b);
-    if (ok && !first) first = b;
-  });
+  const first = buildNav();
   if (first) switchView(first.dataset.v, first);
 });
 
@@ -158,7 +215,7 @@ async function renderInicio() {
       </div>
     </div>`;
   const go = el("ini_clientes");
-  if (go) go.onclick = () => { const b = document.querySelector('nav.tabs button[data-v="clientes"]'); if (b && !b.classList.contains("hidden")) switchView("clientes", b); };
+  if (go) go.onclick = () => { const b = document.querySelector('nav.tabs button[data-v="basedatos"]'); if (b && !b.classList.contains("hidden")) switchView("basedatos", b); };
 }
 
 // ---------- Respuestas rápidas (CRUD + Google Sheets) ----------
@@ -475,21 +532,19 @@ async function renderUsers() {
       : `<span style="color:var(--muted)">—</span>`;
     return `<tr>
     <td>${escape(u.name || "—")}<div style="color:var(--muted);font-size:12px">${escape(u.email || "")}</div></td>
-    <td><select class="mini role-sel" data-uid="${u.uid}" ${u.uid === ME.uid ? "disabled" : ""}>
-      <option value="agent" ${u.role === "agent" ? "selected" : ""}>Agente</option>
-      <option value="supervisor" ${u.role === "supervisor" ? "selected" : ""}>Supervisor</option>
-      <option value="admin" ${u.role === "admin" ? "selected" : ""}>Admin</option></select></td>
+    <td><select class="mini role-sel" data-uid="${u.uid}" ${u.uid === ME.uid ? "disabled" : ""}>${roleOptionsHTML(u.role)}</select></td>
     <td>${pinCell}</td>
     <td>${u.active ? '<span class="pill agent">Activo</span>' : '<span class="pill" style="background:var(--panel2);color:var(--muted);border:1px solid var(--line)">Inactivo</span>'}</td>
     <td>${u.uid === ME.uid ? "" : `<button class="mini" data-toggle="${u.uid}" data-s="${u.active}">${u.active ? "Desactivar" : "Activar"}</button>`}</td></tr>`;
   }).join("");
-  el("v-users").innerHTML = `<h1>Usuarios</h1><p class="lead">Crea las cuentas de tu equipo. Tú les das el correo y el PIN; ellos solo usan la extensión.</p>
+  el("v-users").innerHTML = `<h1>Usuarios</h1><p class="lead">Crea las cuentas de tu equipo y define qué ve cada rol. Los roles del panel (Admin, Supervisor, Editor, Cajero, Lector) entran aquí; el rol Agente usa la extensión de WhatsApp.</p>
     <div class="formcard">
       <h3 style="margin:0 0 14px">Crear usuario</h3>
       <label>Nombre</label><input id="u_name" placeholder="Ej. María López">
       <label>Correo</label><input id="u_email" type="email" placeholder="maria@empresa.com">
       <label>PIN / contraseña (mínimo 6)</label><input id="u_pin" placeholder="Ej. 123456">
-      <label>Rol</label><select id="u_role"><option value="agent">Agente</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select>
+      <label>Rol</label><select id="u_role">${roleOptionsHTML("agent")}</select>
+      <p class="note" style="margin:6px 0 0">Roles del <b>panel</b>: Admin, Supervisor, Editor, Cajero, Lector. El rol <b>Agente</b> es solo para la extensión de WhatsApp (no entra al panel).</p>
       <button class="btn" id="u_create">Crear usuario</button>
       <div class="msg" id="u_msg"></div>
       <p class="note" style="margin-top:8px">El usuario queda activo al instante. Comparte con esa persona su correo y PIN para que entre a la extensión.</p>
@@ -499,7 +554,9 @@ async function renderUsers() {
       <b>PIN / Contraseña</b> = tu <b>cuaderno privado</b> (solo lo ve el admin). Firebase cifra la contraseña real y nadie la puede leer, así que aquí solo la <b>anotas</b>para recordarla. <b>Anotar NO cambia la contraseña.</b><br>
       <b>¿Alguien olvidó su contraseña?</b>Toca <b>Restablecer</b>: le llega un correo a esa cuenta con un enlace para poner una nueva. Cuando la ponga, anótala aquí con el para tenerla a mano.<br>
       <span style="color:var(--muted)">Nota: para crear usuarios nuevos, el PIN que escribes sí es el de acceso desde el inicio. El problema es solo con los usuarios viejos cuya contraseña ya nadie recuerda.</span>
-    </div>` : ""}`;
+    </div>` : ""}
+    ${isAdminStrict() ? `<div id="u_permisos" style="margin-top:26px"></div>` : ""}`;
+  if (isAdminStrict()) renderPermisosMatrix();
 
   el("u_create").onclick = async () => {
     const name = el("u_name").value.trim(), email = el("u_email").value.trim(), pin = el("u_pin").value, role = el("u_role").value;
@@ -539,6 +596,58 @@ async function renderUsers() {
   });
 }
 
+// ---------- Permisos por rol (qué pestañas ve cada rol) ----------
+const PERM_ROLES = ["supervisor", "editor", "cajero", "lector"]; // admin siempre ve todo
+let permWork = null; // copia de trabajo { rol: [views] }
+async function renderPermisosMatrix() {
+  const box = el("u_permisos"); if (!box) return;
+  // Copia de trabajo desde lo configurado (o defaults)
+  permWork = {};
+  PERM_ROLES.forEach(r => { permWork[r] = (roleViewsFor(r) || []).slice(); });
+  paintPermisosMatrix();
+}
+function paintPermisosMatrix() {
+  const box = el("u_permisos"); if (!box) return;
+  const head = `<tr><th style="text-align:left">Pestaña</th>${PERM_ROLES.map(r => `<th style="text-align:center">${ROLE_LABELS[r]}</th>`).join("")}</tr>`;
+  let body = "";
+  NAV_SECTIONS.forEach(sec => {
+    body += `<tr><td colspan="${PERM_ROLES.length + 1}" style="background:var(--panel2);font-weight:700;font-size:12px;letter-spacing:.04em;color:var(--muted);padding:8px 10px">${sec.label}</td></tr>`;
+    sec.views.forEach(v => {
+      body += `<tr><td>${VIEW_LABELS[v] || v}</td>${PERM_ROLES.map(r => {
+        const on = permWork[r].indexOf(v) >= 0;
+        return `<td style="text-align:center"><input type="checkbox" class="perm-chk" data-role="${r}" data-view="${v}" ${on ? "checked" : ""} style="width:auto"></td>`;
+      }).join("")}</tr>`;
+    });
+  });
+  box.innerHTML = `<div class="formcard" style="max-width:none">
+    <h3 style="margin:0 0 6px">Permisos por rol — qué pestañas ve cada quién</h3>
+    <p class="note" style="margin:0 0 12px">Marca las pestañas que cada rol puede <b>ver</b>. <b>Admin</b> siempre ve todo. Cuando un usuario entre, solo verá lo marcado para su rol. (La edición/borrado sigue protegida por rol y por las reglas de seguridad de Firestore.)</p>
+    <div style="overflow-x:auto"><table style="min-width:520px"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap">
+      <button class="btn" id="perm_save">Guardar permisos</button>
+      <button class="btn sec" id="perm_reset" style="border:1px solid var(--line)">Restaurar valores por defecto</button>
+      <span class="msg" id="perm_msg"></span>
+    </div>
+  </div>`;
+  box.querySelectorAll(".perm-chk").forEach(c => c.onchange = () => {
+    const r = c.dataset.role, v = c.dataset.view;
+    const arr = permWork[r]; const i = arr.indexOf(v);
+    if (c.checked && i < 0) arr.push(v); else if (!c.checked && i >= 0) arr.splice(i, 1);
+  });
+  el("perm_reset").onclick = () => { PERM_ROLES.forEach(r => { permWork[r] = (DEFAULT_ROLE_VIEWS[r] || []).slice(); }); paintPermisosMatrix(); };
+  el("perm_save").onclick = async () => {
+    const msg = el("perm_msg"); msg.className = "msg"; msg.textContent = "Guardando…";
+    const perms = { admin: ALL_VIEWS.slice() };
+    PERM_ROLES.forEach(r => { perms[r] = permWork[r].slice(); });
+    try {
+      await setDoc(doc(db, "config", "app"), { rolePerms: perms, updatedAt: serverTimestamp() }, { merge: true });
+      ROLE_VIEWS = perms;
+      buildNav(); // refleja los cambios en el menú de inmediato
+      msg.className = "msg ok"; msg.textContent = "✓ Permisos guardados. Cada rol verá solo lo marcado la próxima vez que entre.";
+    } catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message) + " (solo el administrador puede cambiar permisos)."; }
+  };
+}
+
 // ---------- Configuración IA ----------
 const AI_MODELS = {
   deepseek: [["deepseek-chat", "deepseek-chat (recomendado)"], ["deepseek-reasoner", "deepseek-reasoner (razonamiento)"]],
@@ -554,7 +663,15 @@ async function renderConfig() {
   const provider = cfg.provider || (cfg.geminiKey ? "gemini" : "deepseek");
   const curKey = cfg.aiKey || cfg.geminiKey || "";
   const curModel = cfg.aiModel || cfg.geminiModel || "";
-  el("v-config").innerHTML = `<h1>Configuración de IA</h1><p class="lead">Elige el proveedor y pon la clave UNA vez aquí. Funciona para TODO el equipo; nadie más configura nada.</p>
+  el("v-config").innerHTML = `<h1>Configuración</h1><p class="lead">Todo lo del sistema en un solo lugar, ordenado por secciones. Pones las claves y conexiones UNA vez y funciona para TODO el equipo.</p>
+    <div class="subtabs" id="cfgtabs">
+      <button class="subtab on" data-pane="ia">IA</button>
+      <button class="subtab" data-pane="empresa">Empresa</button>
+      <button class="subtab" data-pane="conexiones">Conexiones</button>
+      <button class="subtab" data-pane="recepcion">Recepción</button>
+      <button class="subtab" data-pane="conocimiento">Conocimiento IA</button>
+    </div>
+    <div class="cfgpane" data-pane="ia">
     <div class="formcard">
       <label>Proveedor de IA</label>
       <select id="c_provider">
@@ -577,6 +694,8 @@ async function renderConfig() {
       <button class="btn" id="c_visionsave">Guardar clave de comprobantes</button>
       <div class="msg" id="c_visionmsg"></div>
     </div>
+    </div>
+    <div class="cfgpane" data-pane="empresa" style="display:none">
     <div class="formcard">
       <h3 style="margin:0 0 6px">Datos de la empresa</h3>
       <p class="note" style="margin:0 0 12px">El nombre se usa en la variable <code>{empresa}</code>de las respuestas rápidas.</p>
@@ -585,6 +704,8 @@ async function renderConfig() {
       <button class="btn" id="c_csave">Guardar empresa</button>
       <div class="msg" id="c_cmsg"></div>
     </div>
+    </div>
+    <div class="cfgpane" data-pane="conexiones" style="display:none">
     <div class="formcard">
       <h3 style="margin:0 0 6px">Google Sheets (respuestas)</h3>
       <p class="note" style="margin:0 0 12px">Pega la URL del "puente" (Apps Script) para conectar tus respuestas con tu Google Sheet.
@@ -615,6 +736,8 @@ async function renderConfig() {
       <button class="btn" id="c_recibossave">Guardar URL</button>
       <div class="msg" id="c_recibosmsg"></div>
     </div>
+    </div>
+    <div class="cfgpane" data-pane="recepcion" style="display:none">
     <div class="formcard">
       <h3 style="margin:0 0 6px">Recepción — Numeración automática</h3>
       <p class="note" style="margin:0 0 12px">Define desde qué número siguen el <b>N° de Recepción</b>y el <b>N° de Comprobante/Recibo</b>, y el <b>N° de Gasto</b>(Egresos). El sistema usa el número y sube +1 solo en cada registro.</p>
@@ -641,6 +764,8 @@ async function renderConfig() {
       <button class="btn" id="c_listsave">Guardar listas</button>
       <div class="msg" id="c_listmsg"></div>
     </div>
+    </div>
+    <div class="cfgpane" data-pane="conocimiento" style="display:none">
     <div class="formcard">
       <h3 style="margin:0 0 6px">Conocimiento de la empresa (para la IA)</h3>
       <p class="note" style="margin:0 0 12px">Escribe aquí todo lo que la IA debe saber de tu empresa: qué es CONTAX, servicios y precios,
@@ -656,7 +781,13 @@ Tono: cordial, claro y profesional. Tratar de 'usted'.
 Contacto: …">${escape(cfg.aiContext || "")}</textarea>
       <button class="btn" id="c_ctxsave">Guardar conocimiento</button>
       <div class="msg" id="c_ctxmsg"></div>
+    </div>
     </div>`;
+  // Subpestañas de Configuración
+  el("v-config").querySelectorAll("#cfgtabs .subtab").forEach(b => b.onclick = () => {
+    el("v-config").querySelectorAll("#cfgtabs .subtab").forEach(x => x.classList.toggle("on", x === b));
+    el("v-config").querySelectorAll(".cfgpane").forEach(p => p.style.display = (p.dataset.pane === b.dataset.pane ? "" : "none"));
+  });
   const provSel = el("c_provider"); provSel.value = provider;
   function fillModels() {
     const p = provSel.value;
@@ -2405,8 +2536,71 @@ async function egLoad() {
   EGRESOS.sort((a, b) => (b.fechaISO || "").localeCompare(a.fechaISO || ""));
   egLoaded = true;
 }
+// Comprime una imagen (File) a un dataURL JPEG más liviano (para leerla con IA)
+function cxCompressImage(file, maxPx, quality) {
+  maxPx = maxPx || 1100; quality = quality || 0.72;
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > h && w > maxPx) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else if (h >= w && h > maxPx) { w = Math.round(w * maxPx / h); h = maxPx; }
+        const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("No se pudo abrir la imagen."));
+      img.src = fr.result;
+    };
+    fr.onerror = () => reject(new Error("No se pudo leer el archivo."));
+    fr.readAsDataURL(file);
+  });
+}
+// Lee un comprobante con Gemini (usa la clave visionKey, o la principal si es Gemini)
+const CX_GEMINI_FALLBACKS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash", "gemini-1.5-flash"];
+async function ocrComprobanteGemini(dataUrl) {
+  const cfg = await loadConfigDoc();
+  let key = (cfg.visionKey || "").trim();
+  const mainKey = (cfg.aiKey || cfg.geminiKey || "").trim();
+  if (!key && /^AIza/.test(mainKey)) key = mainKey;
+  if (!key) return { error: "Falta una clave de Gemini para leer comprobantes. Ponla en Configuración → IA → 'Clave de Gemini para leer comprobantes'." };
+  if (!/^AIza/.test(key)) return { error: "La clave de comprobantes debe ser de Gemini (empieza con AIza…)." };
+  const mime = (dataUrl.match(/^data:([^;]+);base64,/) || [])[1] || "image/jpeg";
+  const b64 = dataUrl.replace(/^data:[^;]+;base64,/, "");
+  if (!b64) return { error: "No hay imagen." };
+  const prompt = "Eres un asistente contable en Bolivia. La imagen es un comprobante de pago/transferencia bancaria o un gasto. " +
+    "Extrae los datos y responde ÚNICAMENTE con un JSON válido (sin texto extra, sin ```), con estas claves exactas: " +
+    '{"banco":"","importe":"","moneda":"","depositante":"","destino":"","fecha":"","hora":"","nroOperacion":"","concepto":"","observacion":""}. ' +
+    "importe solo el número (ej. 150.00). Si un dato no aparece, déjalo como cadena vacía.";
+  const body = JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: b64 } }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 600 } });
+  const baseModel = /gemini/i.test(cfg.aiModel || cfg.geminiModel || "") ? (cfg.aiModel || cfg.geminiModel) : "gemini-2.5-flash";
+  const models = [baseModel, ...CX_GEMINI_FALLBACKS].filter((m, i, a) => m && a.indexOf(m) === i && /gemini/i.test(m));
+  let lastErr = "";
+  for (const model of models) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      if (res.ok) {
+        const data = await res.json();
+        let txt = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts || []).map(p => p.text).join("") || "").trim();
+        txt = txt.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "").trim();
+        let obj = {}; try { obj = JSON.parse(txt); } catch (e) { const m = txt.match(/\{[\s\S]*\}/); if (m) { try { obj = JSON.parse(m[0]); } catch (_) {} } }
+        if (!obj || typeof obj !== "object") return { error: "No se pudo interpretar el comprobante." };
+        return { data: obj };
+      }
+      let d = ""; try { d = (await res.json()).error.message || ""; } catch (e) {}
+      lastErr = `(${res.status}) ${d}`;
+      if (!(res.status === 404 || /not found|not supported/i.test(d))) break;
+    } catch (e) { lastErr = String(e.message || e); }
+  }
+  return { error: "No se pudo leer el comprobante. " + lastErr };
+}
+
+let egComprobante = null, egCompData = null;
 async function renderEgresos() {
   el("v-egresos").innerHTML = `<h1>Egresos</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  egComprobante = null; egCompData = null;
   await egLoad();
   paintEgresos();
 }
@@ -2443,6 +2637,16 @@ function paintEgresos() {
           <div class="field"><label>Detalle</label><input id="e_det" placeholder="Ej. alquiler oficina octubre"></div>
           <div class="field"><label>Atención / responsable</label><select id="e_at"><option value="">—</option>${L.atencion.map(s => `<option>${escape(s)}</option>`).join("")}</select></div>
         </div>
+        <div class="field" style="margin-top:4px;border:1px dashed var(--line);border-radius:10px;padding:12px">
+          <label style="font-weight:600">📷 Comprobante (opcional) — la IA extrae los datos</label>
+          <p class="note" style="margin:2px 0 8px">Toma o sube la foto del comprobante. Desde el celular abre la cámara. La IA llena el <b>importe</b> y el <b>detalle</b> (banco, depositante, N° de operación); tú solo eliges la <b>cuenta contable</b>.</p>
+          <input id="e_compfile" type="file" accept="image/*" capture="environment">
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <button type="button" class="btn sec" id="e_compread" style="border:1px solid var(--line)" disabled>🤖 Leer comprobante con IA</button>
+            <span class="msg" id="e_compmsg"></span>
+          </div>
+          <div id="e_compprev" style="margin-top:8px"></div>
+        </div>
         <button class="btn" id="e_save">Registrar egreso</button>
         <div class="msg" id="e_msg"></div>
       </div>` : ''}
@@ -2454,6 +2658,36 @@ function paintEgresos() {
       <table><thead><tr><th>Fecha</th><th>N° Gasto</th><th>Cuenta</th><th>Detalle</th><th>Pago</th><th>Resp.</th><th style="text-align:right">Importe</th><th></th></tr></thead>
       <tbody>${rows || `<tr><td colspan="8" style="color:var(--muted)">Sin egresos todavía.</td></tr>`}</tbody></table>`;
     if (el("e_save")) el("e_save").onclick = registrarEgreso;
+    if (el("e_compfile")) el("e_compfile").onchange = async () => {
+      const f = el("e_compfile").files && el("e_compfile").files[0]; if (!f) return;
+      const msg = el("e_compmsg"); msg.className = "msg"; msg.textContent = "Preparando imagen…";
+      try {
+        egComprobante = await cxCompressImage(f);
+        egCompData = null;
+        el("e_compprev").innerHTML = `<img src="${egComprobante}" style="max-height:140px;border-radius:8px;border:1px solid var(--line)">`;
+        el("e_compread").disabled = false;
+        msg.textContent = "Listo. Toca “Leer comprobante con IA”.";
+      } catch (e) { msg.className = "msg err"; msg.textContent = e.message || "No se pudo preparar la imagen."; }
+    };
+    if (el("e_compread")) el("e_compread").onclick = async () => {
+      if (!egComprobante) return;
+      const msg = el("e_compmsg"); const btn = el("e_compread");
+      btn.disabled = true; const o = btn.textContent; btn.textContent = "Leyendo…"; msg.className = "msg"; msg.textContent = "";
+      const r = await ocrComprobanteGemini(egComprobante);
+      btn.disabled = false; btn.textContent = o;
+      if (r.error) { msg.className = "msg err"; msg.textContent = r.error; return; }
+      egCompData = r.data || {};
+      const d = egCompData;
+      if (d.importe && el("e_imp") && !el("e_imp").value) { const n = parseFloat(String(d.importe).replace(/[^\d.]/g, "")); if (!isNaN(n)) el("e_imp").value = n; }
+      const partes = [];
+      if (d.concepto) partes.push(d.concepto);
+      if (d.banco) partes.push("Banco " + d.banco);
+      if (d.depositante) partes.push("de " + d.depositante);
+      if (d.nroOperacion) partes.push("Op. " + d.nroOperacion);
+      const detalleAuto = partes.join(" · ");
+      if (detalleAuto && el("e_det") && !el("e_det").value) el("e_det").value = detalleAuto;
+      msg.className = "msg ok"; msg.textContent = "✓ Datos extraídos. Revisa y elige la cuenta contable.";
+    };
     if (el("e_export")) el("e_export").onclick = () => {
       const H = ["Fecha", "N Gasto", "Cuenta contable", "Detalle", "Forma pago", "Responsable", "Importe"];
       const rws = EGRESOS.map(r => [r.fecha || fmtFecha(r.fechaISO), r.nroGasto || "", r.cuentaContable || "", r.detalle || "", r.tipoPago || "", r.atencion || "", (Number(r.importe) || 0)]);
@@ -2478,9 +2712,12 @@ async function registrarEgreso() {
       nroGasto: nro, fechaISO: now.toISOString(), fecha: el("e_fecha").value.trim(),
       cuentaContable: el("e_cuenta").value, detalle: el("e_det").value.trim(), importe: imp,
       tipoPago: el("e_pago").value, atencion: el("e_at").value,
+      compBanco: (egCompData && egCompData.banco) || "", compDepositante: (egCompData && egCompData.depositante) || "",
+      compNroOperacion: (egCompData && egCompData.nroOperacion) || "", compFecha: (egCompData && egCompData.fecha) || "",
       registradoPorUid: (ME && ME.uid) || "", registradoPorNombre: (ME && (ME.name || ME.email)) || "", createdAt: serverTimestamp()
     };
     await setDoc(doc(collection(db, "egresos")), eg);
+    egComprobante = null; egCompData = null;
     await egLoad(); paintEgresos();
   } catch (e) { btn.disabled = false; btn.textContent = "Registrar egreso"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
 }
