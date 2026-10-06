@@ -1,0 +1,57 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v14  +  CRM v23
+===============================================================
+
+PANEL v14 — VELOCIDAD + MEJORAS
+
+1) MUCHO MÁS RÁPIDO Y SIN GASTAR FIREBASE
+   • Base de Datos y Recepción ahora quedan EN CACHÉ: si navegas de
+     una pestaña a otra y vuelves, ya NO se vuelve a leer todo (es
+     instantáneo y no consume cuota). Para traer cambios nuevos usa
+     el botón "↻ Actualizar".
+   • Recepción carga SOLO la gestión (año) actual, no todos los años.
+     Hay un selector "Gestión 2026 / 2025 / … / Todas" para ver otros
+     años cuando los necesites. Así entra rapidísimo.
+   • El formulario de Registrar ya no necesita leer el historial: abrir
+     Recepción para registrar es inmediato. El historial se carga solo
+     cuando abres la pestaña "Lista".
+
+2) BASE DE DATOS — FIJAR COLUMNAS
+   En el botón "Columnas", cada columna tiene un 📌. Tócalo para FIJAR
+   esa columna: las fijadas quedan siempre visibles a la izquierda
+   aunque te muevas de lado (ideal para Nombre y NIT). Se recuerda.
+
+3) RECEPCIÓN — "lo que guardé no aparecía"
+   Arreglado. Antes, cuando se agotaba la cuota de Firebase, la lista
+   salía vacía (no podía leer) aunque el dato SÍ estaba guardado. Ahora
+   si hay un error de lectura NO se borra la lista y te avisa. Además,
+   con el selector de gestión verás tus registros del año correcto.
+
+4) RECEPCIÓN — ORDEN DE RECEPCIÓN
+   • Se quitó la casilla "Enviar al correo": ahora SIEMPRE se envía la
+     Orden de Recepción al correo del cliente (si tiene correo).
+   • Nuevo botón "👁 Ver comprobante": en el detalle de cada recepción
+     (y al terminar de registrar) puedes abrir la Orden de Recepción en
+     pantalla para verla, imprimirla o guardarla como PDF y enviarla.
+
+
+CRM v23 — COMPROBANTE DENTRO DE "REGISTRAR PAGO"
+ • Se quitó la pestaña/sección aparte "Leer comprobante".
+ • Ahora, dentro de "Registrar pago", hay un bloque "Comprobante de
+   pago": tocas "Tomar / subir foto" (en el celular abre la cámara),
+   y "Leer comprobante con IA" extrae banco, importe, depositante y
+   N° de operación, llena el importe solo y te avisa si el destino es
+   CONTAX. Esos datos se guardan con el pago y salen en el recibo.
+ • El correo se completa solo desde la base de datos del cliente.
+ • Si el cliente no está en la base, igual puedes registrar el pago
+   escribiendo su nombre/correo a mano (guardarlo en la base lo
+   dejamos para la próxima versión).
+
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v14 (súbelo a GitHub)
+ - LEEME-v14.txt
+Sin cambios de reglas de Firestore.
+El CRM v23 va en su propio zip (acumulado para Edge).
+===============================================================

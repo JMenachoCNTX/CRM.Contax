@@ -3,10 +3,10 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "13";
+const APP_VERSION = "14";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 if (!window.APP_CONFIG || !window.APP_CONFIG.firebase) {
   document.body.innerHTML = '<div style="color:#fff;font-family:sans-serif;padding:40px">Falta config.js con los datos de Firebase.</div>';
@@ -1083,10 +1083,25 @@ function bdEnsureLoadedBridge(cb) {
     } else { cb(false, data && data.error); }
   });
 }
-let bdHidden = [];
+let bdHidden = [], bdPinned = [];
 try { bdHidden = JSON.parse(localStorage.getItem("bd-hidden") || "[]"); if (!Array.isArray(bdHidden)) bdHidden = []; } catch (e) { bdHidden = []; }
+try { bdPinned = JSON.parse(localStorage.getItem("bd-pinned") || "[]"); if (!Array.isArray(bdPinned)) bdPinned = []; } catch (e) { bdPinned = []; }
 function bdSaveHidden() { try { localStorage.setItem("bd-hidden", JSON.stringify(bdHidden)); } catch (e) {} }
+function bdSavePinned() { try { localStorage.setItem("bd-pinned", JSON.stringify(bdPinned)); } catch (e) {} }
 function bdVisibleHeader() { return bdHeader.filter(h => bdHidden.indexOf(h) < 0); }
+// Devuelve las columnas visibles con las FIJADAS primero, y el ancho/posición de fijado
+const BD_PINW = 170;
+function bdOrderedHeader() {
+  const vis = bdVisibleHeader();
+  const pin = bdPinned.filter(h => vis.indexOf(h) >= 0);
+  const rest = vis.filter(h => pin.indexOf(h) < 0);
+  return { ordered: pin.concat(rest), pin: pin };
+}
+function bdPinStyle(h, pin, head) {
+  const i = pin.indexOf(h); if (i < 0) return "";
+  const bg = head ? "var(--panel2)" : "var(--panel)";
+  return `position:sticky;left:${i * BD_PINW}px;z-index:${head ? 6 : 5};min-width:${BD_PINW}px;max-width:${BD_PINW}px;background:${bg};box-shadow:${i === pin.length - 1 ? "2px 0 5px rgba(0,0,0,.12)" : "none"}`;
+}
 
 // Lee un campo por su clave interna (busca la etiqueta del Sheet)
 function bdV(r, key) { const lbl = (bdKey2Header && bdKey2Header[key]) || BD_KEY2LBL[key]; const v = r && lbl != null ? r[lbl] : ""; return String(v == null ? "" : v).trim(); }
@@ -1149,7 +1164,9 @@ function bdFetch(cb) {
   });
 }
 
-async function renderBaseDatos() {
+async function renderBaseDatos(force) {
+  // Caché: si ya está cargada, no volvemos a leer (navegar entre pestañas es instantáneo y no gasta Firebase)
+  if (!force && bdLoaded && BD.length) { BD.forEach((r, i) => r._i = i); paintBaseDatos(); return; }
   const cfg0 = await loadConfigDoc();
   if (cfg0.bdEnFirebase) {
     el("v-basedatos").innerHTML = `<h1>Base de Datos</h1><p class="lead"><span class="cx-spin"></span> Cargando desde Firebase…</p>`;
@@ -1217,17 +1234,18 @@ function paintBaseDatos() {
   const total = BD.length, activos = counts.activo;
   const ingreso = BD.filter(bdIsActivo).reduce((s, r) =>s + bdMoney(bdV(r, "costo")), 0);
   // Cabecera: solo las columnas visibles del Sheet + una fija al final para "Editar/Ver"
-  const visHeader = bdVisibleHeader();
-  const thead = `<tr>${visHeader.map(h => `<th>${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
+  const { ordered: visHeader, pin: pinCols } = bdOrderedHeader();
+  const thead = `<tr>${visHeader.map(h => `<th style="${bdPinStyle(h, pinCols, true)}">${pinCols.indexOf(h) >= 0 ? "📌 " : ""}${escape(h)}</th>`).join("")}<th class="bd-actioncol"></th></tr>`;
   const rowCls = { inactivo: "bd-inact", nit_baja: "bd-inact", susc_inact: "bd-inact", lista_negra: "bd-negra" };
   const rows = list.map(r => {
     const info = bdEstadoInfo(r);
     const tds = visHeader.map(lbl => {
       const val = String(r[lbl] == null ? "" : r[lbl]);
+      const ps = bdPinStyle(lbl, pinCols, false);
       if (lbl === ESTADO_LBL) {
-        return `<td><span class="badge ${info.cls}">${escape(info.raw || "—")}</span></td>`;
+        return `<td style="${ps}"><span class="badge ${info.cls}">${escape(info.raw || "—")}</span></td>`;
       }
-      return `<td title="${escape(val)}">${escape(val) || "<span style='color:var(--muted)'>—</span>"}</td>`;
+      return `<td style="${ps}" title="${escape(val)}">${escape(val) || "<span style='color:var(--muted)'>—</span>"}</td>`;
     }).join("");
     const cls = rowCls[info.grupo] || "";
     return `<tr data-open="${r._i}" class="${cls}">${tds}<td class="bd-actioncol"><button class="mini" data-edit="${r._i}">${canEdit ? "Editar" : "Ver"}</button></td></tr>`;
@@ -1276,7 +1294,7 @@ function paintBaseDatos() {
   if (el("bd_tipo")) { el("bd_tipo").value = bdTipo; el("bd_tipo").onchange = () => { bdTipo = el("bd_tipo").value; paintBaseDatos(); }; }
   if (el("bd_new")) el("bd_new").onclick = () =>openBDModal(null);
   if (el("bd_cols")) el("bd_cols").onclick = () => openBDColsModal();
-  if (el("bd_reload")) el("bd_reload").onclick = () =>renderBaseDatos();
+  if (el("bd_reload")) el("bd_reload").onclick = () =>renderBaseDatos(true);
   if (el("bd_migrar")) el("bd_migrar").onclick = () => migrarBDaFirebase();
   el("v-basedatos").querySelectorAll(".bd-kpi").forEach(k => { k.style.cursor = "pointer"; k.onclick = () => { const g = "g:" + k.dataset.gfilter; bdEstado = (bdEstado === g) ? "" : g; bdSubtab = "lista"; paintBaseDatos(); }; });
   el("v-basedatos").querySelectorAll("[data-edit]").forEach(b =>b.onclick = (e) => { e.stopPropagation(); openBDModal(BD[+b.dataset.edit]); });
@@ -1300,13 +1318,15 @@ function openBDColsModal() {
   bg.style = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px";
   const items = bdHeader.map((h, i) => {
     const on = bdHidden.indexOf(h) < 0;
-    return `<label style="display:flex;align-items:center;gap:9px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:13px;cursor:pointer">
-      <input type="checkbox" data-col="${escape(h)}" ${on ? "checked" : ""} style="width:auto"> <span style="flex:1">${escape(h)}</span></label>`;
+    const pinned = bdPinned.indexOf(h) >= 0;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:13px;cursor:pointer">
+      <input type="checkbox" data-col="${escape(h)}" ${on ? "checked" : ""} style="width:auto"> <span style="flex:1">${escape(h)}</span>
+      <span class="bc-pin" data-pin="${escape(h)}" title="Fijar/soltar columna" style="cursor:pointer;opacity:${pinned ? "1" : ".3"};font-size:15px">📌</span></label>`;
   }).join("");
-  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;width:460px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
+  bg.innerHTML = `<div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;width:500px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <h3 style="margin:0">Columnas visibles</h3><button class="mini" id="bc_x">✕</button></div>
-    <p class="note" style="margin:0 0 12px">Marca las columnas que quieres ver. Las que desmarques se ocultan hasta que las vuelvas a activar (se recuerda en este navegador).</p>
+      <h3 style="margin:0">Columnas</h3><button class="mini" id="bc_x">✕</button></div>
+    <p class="note" style="margin:0 0 12px">Marca las que quieres ver. Toca el 📌 para <b>fijar</b>una columna: las fijadas quedan siempre visibles a la izquierda aunque te muevas de lado. (Se recuerda en este navegador.)</p>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button class="btn sec" id="bc_all" style="flex:1;border:1px solid var(--line)">Mostrar todas</button>
       <button class="btn sec" id="bc_none" style="flex:1;border:1px solid var(--line)">Ocultar todas</button>
@@ -1320,9 +1340,15 @@ function openBDColsModal() {
   bg.querySelector("#bc_x").onclick = close;
   bg.querySelector("#bc_all").onclick = () => bg.querySelectorAll("input[data-col]").forEach(c => c.checked = true);
   bg.querySelector("#bc_none").onclick = () => bg.querySelectorAll("input[data-col]").forEach(c => c.checked = false);
+  bg.querySelectorAll(".bc-pin").forEach(p => p.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const h = p.dataset.pin; const idx = bdPinned.indexOf(h);
+    if (idx >= 0) bdPinned.splice(idx, 1); else bdPinned.push(h);
+    p.style.opacity = bdPinned.indexOf(h) >= 0 ? "1" : ".3";
+  });
   bg.querySelector("#bc_apply").onclick = () => {
     bdHidden = [...bg.querySelectorAll("input[data-col]")].filter(c => !c.checked).map(c => c.dataset.col);
-    bdSaveHidden(); close(); paintBaseDatos();
+    bdSaveHidden(); bdSavePinned(); close(); paintBaseDatos();
   };
 }
 
@@ -1615,12 +1641,22 @@ async function panelAI(cfg, system, user) {
 // ============================================================
 //  MÓDULO OPERACIONES — Recepción · Dashboard · Listas
 // ============================================================
-let RECEP = [], recepLoaded = false, recFilterMes = "", recFlash = "";
-async function recepLoad() {
-  try { const snap = await getDocs(collection(db, "recepciones")); RECEP = snap.docs.map(d => Object.assign({ id: d.id }, d.data())); }
-  catch (e) { RECEP = []; }
-  RECEP.sort((a, b) => (b.fechaISO || "").localeCompare(a.fechaISO || ""));
-  recepLoaded = true;
+let RECEP = [], recepLoaded = false, recFilterMes = "", recFlash = "", recGestion = String(new Date().getFullYear()), recLoadedGestion = null, recepError = "";
+async function recepLoad(gestion) {
+  gestion = gestion || recGestion || String(new Date().getFullYear());
+  try {
+    let q;
+    if (gestion === "todas") {
+      q = query(collection(db, "recepciones"), orderBy("fechaISO", "desc"), limit(1500));
+    } else {
+      const a = gestion + "-01-01", b = (Number(gestion) + 1) + "-01-01";
+      q = query(collection(db, "recepciones"), where("fechaISO", ">=", a), where("fechaISO", "<", b), orderBy("fechaISO", "desc"), limit(3000));
+    }
+    const snap = await getDocs(q);
+    RECEP = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    RECEP.sort((a, b) => (b.fechaISO || "").localeCompare(a.fechaISO || ""));
+    recLoadedGestion = gestion; recepLoaded = true; recepError = "";
+  } catch (e) { recepError = e.code || e.message; recepLoaded = true; /* conserva lo que ya había */ }
 }
 function money(n) { return "Bs " + (Number(n) || 0).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtFecha(iso) { if (!iso) return ""; try { return new Date(iso).toLocaleString("es-BO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (e) { return iso; } }
@@ -1682,10 +1718,47 @@ async function postRecibo(rec) {
 
 // ---------- RECEPCIÓN (completa) ----------
 let recCli = null; // cliente seleccionado para autollenado
-let recSubtab = "form", recListFilter = "", recListSort = "fecha";
+let recSubtab = "form", recListFilter = "", recListSort = "fecha", recLastRec = null;
+// Genera la Orden de Recepción en HTML (misma que el correo) para ver/descargar/imprimir como PDF
+function comprobanteHTML(r) {
+  const nv = "#16233f";
+  const row = (l, v) => v ? `<tr><td style="color:#55617a;white-space:nowrap;padding:2px 10px 2px 0;font-size:12px">${l}</td><td style="font-size:12px;padding:2px 0">${escape(v)}</td></tr>` : "";
+  const money2 = v => { const n = Number(v); return "Bs" + (isNaN(n) ? v : n.toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })); };
+  const comp = (r.compBanco || r.compNroOperacion || r.compDepositante) ? `<div style="margin-top:12px;font-size:11px;color:#55617a;border-top:1px solid #eef0f4;padding-top:8px">Datos de la transacción: ${[r.compBanco ? "Banco " + r.compBanco : "", r.compNroOperacion ? "N° oper. " + r.compNroOperacion : "", r.compDepositante ? "Depositante " + r.compDepositante : ""].filter(Boolean).map(escape).join(" · ")}</div>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Orden de Recepción ${escape(String(r.nroRecepcion || ""))}</title>
+  <style>@page{size:A4 landscape;margin:0}*{box-sizing:border-box;font-family:Helvetica,Arial,sans-serif;color:#1f2a3a}body{margin:0}
+  .band{background:${nv};color:#fff;text-align:center;padding:24px 0 20px}.band .t{font-size:38px;letter-spacing:.22em}
+  .sub{text-align:center;font-size:22px;color:#2b3952;margin:16px 0 6px}.wrap{padding:0 46px}
+  .cols{display:flex;gap:30px;border-top:1px solid #dfe3ea;padding-top:14px;margin-top:8px}.col{flex:1}.ch{text-align:center;font-size:15px;color:#2b3952;margin:0 0 8px}
+  table.serv{width:100%;border-collapse:collapse;margin-top:8px}table.serv th{border-top:1px solid #cfd4de;border-bottom:1px solid #cfd4de;padding:9px 6px;font-size:12px;color:#2b3952;text-align:left}
+  table.serv td{padding:14px 6px;font-size:12px;border-bottom:1px solid #eef0f4}.r{text-align:right}
+  .tot{margin-top:14px;text-align:right;font-size:13px;line-height:1.9}.disc{margin:34px 46px 0;font-size:10.5px;color:#55617a;font-style:italic;text-align:center}
+  .foot{margin-top:30px;background:${nv};color:#cdd4e2;font-size:10px;padding:9px 46px;display:flex;justify-content:space-between}
+  .noprint{text-align:center;margin:16px}@media print{.noprint{display:none}}</style></head><body>
+  <div class="noprint"><button onclick="window.print()" style="padding:10px 18px;font-size:14px;cursor:pointer;background:#16233f;color:#fff;border:none;border-radius:8px">Imprimir / Guardar como PDF</button></div>
+  <div class="band"><div class="t">CONTAX</div></div><div class="sub">Orden de Recepción</div>
+  <div class="wrap"><div class="cols">
+    <div class="col"><div class="ch">Datos del Cliente</div><table>${row("Nombre del Cliente:", r.clienteNombre)}${row("NIT:", r.nit)}${row("ID Cliente:", r.clienteId)}${row("Celular:", r.clienteCelular)}${row("Correo:", r.clienteCorreo)}${row("Tipo de Contribuyente:", r.tipoContribuyente)}${row("Rubro:", r.rubro)}${row("Apertura de NIT:", r.aperturaNit)}</table></div>
+    <div class="col"><div class="ch">Datos de Recepción</div><table>${row("Nro Recepción:", String(r.nroRecepcion || ""))}${row("Nro Recibo:", String(r.nroComprobante || ""))}${row("Día:", r.dia)}${row("Fecha:", r.fecha)}${row("Hora:", r.hora)}${row("Fecha de pago:", r.fechaPago)}</table></div>
+  </div>
+  <div class="sub" style="margin-top:22px">Datos del Servicio</div>
+  <table class="serv"><tr><th>Mes</th><th>Tipo de Servicio</th><th>Nro Recepción</th><th class="r">Importe</th></tr>
+  <tr><td>${escape(r.mesRecepcion || "")}</td><td>${escape(r.servicio || r.servicioNombre || "")}${r.detalleServicio ? `<br><span style="color:#55617a">${escape(r.detalleServicio)}</span>` : ""}</td><td>${escape(String(r.nroRecepcion || ""))}</td><td class="r">${money2(r.importe)}</td></tr></table>
+  <div class="tot">Total: <b>${money2(r.importe)}</b><br>Forma de Pago: <b>${escape(r.tipoPago || "")}</b><br>Atención: <b>${escape(r.atencion || "")}</b>${r.comentarios ? `<br><span style="color:#55617a;font-size:11px">${escape(r.comentarios)}</span>` : ""}</div>${comp}
+  </div>
+  <div class="disc">"CONTAX no asume responsabilidad alguna por declaraciones presentadas fuera de plazo o multas derivadas de la falta de entrega oportuna de documentación por parte del cliente. Es responsabilidad del cliente garantizar la entrega correcta y a tiempo de toda la documentación necesaria."</div>
+  <div class="foot"><span>Dir.: Urbanización El Palmar Calle Zafiro Nro. S/N Zona Sur - 6to Anillo Av. Bolivia</span><span>Contacto: 690-21969</span><span>Correo: info@contaxbolivia.com</span></div>
+  </body></html>`;
+}
+function verComprobante(r) {
+  if (!r) return;
+  const w = window.open("", "_blank");
+  if (!w) { alert("Permite las ventanas emergentes para ver el comprobante."); return; }
+  w.document.write(comprobanteHTML(r)); w.document.close();
+}
 async function renderRecepcion() {
-  el("v-recepcion").innerHTML = `<h1>Recepción</h1><p class="lead"><span class="cx-spin"></span> Cargando clientes desde la Base de Datos…</p>`;
-  await recepLoad();
+  el("v-recepcion").innerHTML = `<h1>Recepción</h1><p class="lead"><span class="cx-spin"></span> Cargando…</p>`;
+  // Solo cargamos los clientes para el formulario; el historial se carga al abrir "Lista".
   bdEnsureLoaded(() => { BD.forEach((r, i) => r._i = i); paintRecepcion(); });
 }
 function recFill(id, v) { const e = el(id); if (e) e.value = v == null ? "" : v; }
@@ -1699,6 +1772,15 @@ function recSortList(list) {
 }
 function paintRecepcion() {
   const canEdit = canEditClientes();
+  // La "Lista" carga el historial de la gestión elegida SOLO cuando se abre (ahorra lecturas)
+  if (recSubtab === "list" && recLoadedGestion !== recGestion) {
+    el("v-recepcion").innerHTML = `<h1>Recepción</h1>
+      <div class="subtabs"><button class="subtab" data-st="form">Registrar</button><button class="subtab on" data-st="list">Lista</button></div>
+      <p class="lead"><span class="cx-spin"></span> Cargando recepciones de la gestión ${escape(recGestion)}…</p>`;
+    el("v-recepcion").querySelectorAll(".subtab").forEach(b => b.onclick = () => { recSubtab = b.dataset.st; paintRecepcion(); });
+    recepLoad(recGestion).then(() => paintRecepcion());
+    return;
+  }
   loadConfigDoc().then(cfg => {
     const L = recListas(cfg);
     const nextRec = parseInt(cfg.nextRecep, 10) || 7048;
@@ -1763,25 +1845,32 @@ function paintRecepcion() {
           <div class="field"><label>N° de operación</label><input id="r_oper" placeholder="—"></div>
           <div class="field"><label>Depositante</label><input id="r_depo" placeholder="Quién hizo el pago"></div>
         </div>
-        <div class="field" style="margin-top:8px"><label><input type="checkbox" id="r_enviar" checked style="width:auto;margin-right:6px">Enviar la Orden de Recepción (PDF) al correo del cliente</label></div>
+        <p class="note" style="margin:8px 0 4px">📧 Al registrar se enviará automáticamente la Orden de Recepción al correo del cliente (si tiene correo).</p>
         <button class="btn" id="r_save">Registrar recepción</button>
         <div class="msg" id="r_msg"></div>
       </div>`;
 
+    const yNow = new Date().getFullYear();
+    const yearOpts = [];
+    for (let y = yNow; y >= 2022; y--) yearOpts.push(`<option value="${y}" ${String(y) === recGestion ? "selected" : ""}>Gestión ${y}</option>`);
+    yearOpts.push(`<option value="todas" ${recGestion === "todas" ? "selected" : ""}>Todas (últimas 1500)</option>`);
     const listHTML = `
       <div class="kpis" style="margin-top:4px">
-        <div class="kpi"><div class="n">${RECEP.length}</div><div class="l">Recepciones</div></div>
-        <div class="kpi"><div class="n">${money(totalAll)}</div><div class="l">Total registrado</div></div>
+        <div class="kpi"><div class="n">${RECEP.length}</div><div class="l">Recepciones (${escape(recGestion === "todas" ? "todas" : "gestión " + recGestion)})</div></div>
+        <div class="kpi"><div class="n">${money(totalAll)}</div><div class="l">Total de la gestión</div></div>
         <div class="kpi"><div class="n" style="color:var(--danger)">${RECEP.filter(r => r.tipoPago === "DEUDOR" || r.estadoDeuda === "con_deuda").length}</div><div class="l">Con deuda</div></div>
       </div>
+      ${recepError ? `<p class="msg err">No se pudo leer: ${escape(recepError)}. Toca "Actualizar".</p>` : ""}
       <div class="toolbar">
-        <input id="r_buscar" class="mini" style="padding:9px;min-width:240px" placeholder="🔎 Buscar en recepciones…" value="${escape(recListFilter)}">
+        <select id="r_gestion" class="mini" style="padding:9px" title="Mostrar solo esta gestión (año)">${yearOpts.join("")}</select>
+        <input id="r_buscar" class="mini" style="padding:9px;min-width:220px" placeholder="🔎 Buscar en esta gestión…" value="${escape(recListFilter)}">
         <select id="r_sort" class="mini" style="padding:9px">
           <option value="fecha">Más recientes</option>
           <option value="cliente">Cliente (A-Z)</option>
           <option value="nrorec">N° Recepción</option>
           <option value="importe">Importe (mayor)</option>
         </select>
+        <button class="btn sec" id="r_reload" style="border:1px solid var(--line)">↻ Actualizar</button>
         <button class="btn sec" id="r_export" style="border:1px solid var(--line)">⬇ Exportar</button>
       </div>
       <div class="bd-scroll"><table class="bd-table"><thead><tr><th>Fecha</th><th>N° Rec</th><th>N° Comp</th><th>Cliente</th><th>Servicio</th><th>Mes</th><th>F. pago</th><th style="text-align:right">Total</th><th>Pago</th><th>Atención</th><th>Deuda</th><th></th></tr></thead>
@@ -1812,11 +1901,17 @@ function paintRecepcion() {
         }
       };
       if (el("r_save")) el("r_save").onclick = registrarRecepcion;
-      if (recFlash && el("r_msg")) { el("r_msg").className = "msg ok"; el("r_msg").textContent = recFlash; recFlash = ""; }
+      if (recFlash && el("r_msg")) {
+        el("r_msg").className = "msg ok"; el("r_msg").innerHTML = escape(recFlash) + (recLastRec ? ` <button class="btn sec" id="r_vercomp" style="border:1px solid var(--line);margin-left:8px;padding:3px 10px">👁 Ver comprobante</button>` : "");
+        recFlash = "";
+        if (el("r_vercomp")) el("r_vercomp").onclick = () => verComprobante(recLastRec);
+      }
     }
     if (recSubtab === "list") {
       const bq = el("r_buscar"); if (bq) bq.oninput = () => { recListFilter = bq.value; const pane = el("r_pane_list"); /* re-render solo lista */ paintRecepcion(); const nb = el("r_buscar"); if (nb) { nb.focus(); nb.setSelectionRange(nb.value.length, nb.value.length); } };
       const ss = el("r_sort"); if (ss) { ss.value = recListSort; ss.onchange = () => { recListSort = ss.value; paintRecepcion(); }; }
+      const gs = el("r_gestion"); if (gs) gs.onchange = () => { recGestion = gs.value; recLoadedGestion = null; paintRecepcion(); };
+      if (el("r_reload")) el("r_reload").onclick = () => { recLoadedGestion = null; paintRecepcion(); };
       if (el("r_export")) el("r_export").onclick = recExport;
       el("v-recepcion").querySelectorAll("[data-ver]").forEach(b => b.onclick = () => openRecepDetalle(RECEP.find(x => x.id === b.dataset.ver)));
       el("v-recepcion").querySelectorAll("[data-recibo]").forEach(b => b.onclick = () => enviarReciboDe(RECEP.find(x => x.id === b.dataset.recibo)));
@@ -1857,13 +1952,14 @@ async function registrarRecepcion() {
     };
     const ref = doc(collection(db, "recepciones")); await setDoc(ref, rec); rec.id = ref.id;
     let enviado = false;
-    if (el("r_enviar").checked && rec.clienteCorreo) {
+    if (rec.clienteCorreo) {
       enviado = await postRecibo(rec);
       if (enviado) { try { await setDoc(doc(db, "recepciones", ref.id), { reciboEnviado: true }, { merge: true }); } catch (e) {} rec.reciboEnviado = true; }
     }
     // Inserción inmediata en la lista (no dependemos de releer todo)
     RECEP.unshift(Object.assign({}, rec));
-    recFlash = `✓ Recepción N° ${nroRec} registrada` + (el("r_enviar").checked ? (rec.clienteCorreo ? (enviado ? " y Orden enviada al correo." : " (no se pudo enviar el PDF; revisa la URL de recibos en Configuración).") : " (sin correo: no se envió PDF).") : ".") + ` — míralo en la pestaña "Lista".`;
+    recFlash = `✓ Recepción N° ${nroRec} registrada` + (rec.clienteCorreo ? (enviado ? " y Orden enviada al correo." : " (no se pudo enviar el PDF; revisa la URL de recibos en Configuración).") : " (el cliente no tiene correo: no se envió PDF).") + ` — míralo en la pestaña "Lista".`;
+    recLastRec = rec;
     recCli = null;
     paintRecepcion();
   } catch (e) { btn.disabled = false; btn.textContent = "Registrar recepción"; msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
@@ -1885,12 +1981,14 @@ function openRecepDetalle(r) {
     ${tieneComp ? `<div class="fs" style="margin-top:8px">Datos del comprobante</div>${row("Banco", r.compBanco)}${row("N° operación", r.compNroOperacion)}${row("Depositante", r.compDepositante)}` : ''}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="btn sec" id="rd_close" style="border:1px solid var(--line)">Cerrar</button>
+      <button class="btn sec" id="rd_ver" style="border:1px solid var(--line)">👁 Ver comprobante</button>
       ${canEditClientes() ? '<button class="btn" id="rd_recibo">Reenviar recibo</button>' : ''}
     </div></div>`;
   document.body.appendChild(bg);
   const close = () => bg.remove();
   bg.onclick = e => { if (e.target === bg) close(); };
   bg.querySelector("#rd_x").onclick = close; bg.querySelector("#rd_close").onclick = close;
+  bg.querySelector("#rd_ver").onclick = () => verComprobante(r);
   const rb = bg.querySelector("#rd_recibo"); if (rb) rb.onclick = () => { enviarReciboDe(r); close(); };
 }
 function recExport() {
