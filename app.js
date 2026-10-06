@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "18";
+const APP_VERSION = "19";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -250,25 +250,22 @@ async function renderRespuestas() {
     <td style="color:var(--muted)">${q.text ? escape(q.text.slice(0, 60)) + (q.text.length > 60 ? "…" : "") : (q.image ? "(solo imagen)" : "")}</td>
     <td style="white-space:nowrap"><button class="mini" data-edit="${q.id}">Editar</button> <button class="mini" data-del="${q.id}">Borrar</button></td></tr>`;
   }).join("");
-  el("v-respuestas").innerHTML = `<h1>Respuestas rápidas</h1><p class="lead">Créalas y edítalas aquí; se comparten con todo el equipo (y con el Google Sheet, si está conectado).</p>
+  el("v-respuestas").innerHTML = `<h1>Respuestas rápidas</h1><p class="lead">Créalas y edítalas aquí; se guardan en la nube (Firebase) y se comparten con todo el equipo al instante.</p>
     <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
       <input id="qr_search" class="mini" style="padding:8px;min-width:220px" placeholder="Buscar por nombre o texto…" value="${escape(qrFilter)}">
       <button class="btn" id="qr_new">＋ Nueva respuesta</button>
-      <button class="btn sec" id="qr_import" style="border:1px solid var(--line)">Importar de Google Sheets</button>
       <span class="msg" id="qr_msg" style="align-self:center"></span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">${chips}</div>
-    <p class="note" style="margin:-6px 0 12px">Los filtros son solo para tu vista; no modifican el Google Sheet.</p>
     <table><thead><tr><th>Nro</th><th>Categoría</th><th>Nombre</th><th>Respuesta</th><th></th></tr></thead>
     <tbody>${rows || '<tr><td colspan="5" style="color:var(--muted)">Sin respuestas con estos filtros.</td></tr>'}</tbody></table>`;
   el("qr_search").oninput = () => { qrFilter = el("qr_search").value; renderRespuestas(); };
   el("v-respuestas").querySelectorAll(".chip").forEach(c =>c.onclick = () => { qrCatFilter = c.dataset.c; renderRespuestas(); });
   el("qr_new").onclick = () =>openQrModal(null);
-  el("qr_import").onclick = importFromSheet;
   el("v-respuestas").querySelectorAll("[data-edit]").forEach(b =>b.onclick = () =>openQrModal(QR.find(x =>x.id === b.dataset.edit)));
   el("v-respuestas").querySelectorAll("[data-del]").forEach(b =>b.onclick = async () => {
     const q = QR.find(x =>x.id === b.dataset.del); if (!q) return;
-    await deleteDoc(doc(db, "quickReplies", q.id)); await sheetPush("delete", q); renderRespuestas();
+    await deleteDoc(doc(db, "quickReplies", q.id)); renderRespuestas();
   });
 }
 function qrWrapSel(ta, a, b) {
@@ -359,7 +356,6 @@ function openQrModal(q) {
     try {
       if (qrEditId) await updateDoc(doc(db, "quickReplies", qrEditId), item);
       else await setDoc(doc(collection(db, "quickReplies")), item);
-      await sheetPush("upsert", item);
       close(); renderRespuestas();
     } catch (e) { $("#f_save").disabled = false; $("#f_msg").className = "msg err"; $("#f_msg").textContent = "Error al guardar" + (String(e).includes("longer than") || String(e).includes("bytes") ? ": la imagen es muy grande. Usa una más liviana." : ": " + (e.code || e.message)); }
   };
@@ -708,24 +704,7 @@ async function renderConfig() {
     </div>
     <div class="cfgpane" data-pane="conexiones" style="display:none">
     <div class="formcard">
-      <h3 style="margin:0 0 6px">Google Sheets (respuestas)</h3>
-      <p class="note" style="margin:0 0 12px">Pega la URL del "puente" (Apps Script) para conectar tus respuestas con tu Google Sheet.
-      Sigue la guía <b>GUIA-GOOGLE-SHEETS.md</b>. Con esto: importas tu hoja, y todo lo que se cree/edite se
-      guarda también en el Sheet.</p>
-      <label>URL del puente de Google Sheets (…/exec)</label>
-      <input id="c_sheet" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.sheetUrl || "")}">
-      <button class="btn" id="c_ssave">Guardar URL</button>
-      <div class="msg" id="c_smsg"></div>
-    </div>
-    <div class="formcard">
-      <h3 style="margin:0 0 6px">Base de Datos (Google Sheets · BDCONTAX)</h3>
-      <p class="note" style="margin:0 0 12px">Pega la URL del "puente" (Apps Script) conectado a tu hoja <b>BDCONTAX</b>.
-      Con esto la pestaña <b>Base de Datos</b>lee y guarda directamente en tu Google Sheet (el Sheet sigue siendo la fuente principal).
-      Sigue la guía <b>GUIA-BASE-DE-DATOS.md</b>.</p>
-      <label>URL del puente de la Base de Datos (…/exec)</label>
-      <input id="c_bdurl" placeholder="https://script.google.com/macros/s/…/exec" value="${escape(cfg.bdUrl || "")}">
-      <button class="btn" id="c_bdsave">Guardar URL</button>
-      <div class="msg" id="c_bdmsg"></div>
+      <p class="note" style="margin:0">La Base de Datos y las Respuestas rápidas ahora viven 100% en la nube (Firebase); ya no necesitas puentes de Google Sheets para ellas. Aquí solo queda el puente de Recibos por correo.</p>
     </div>
     <div class="formcard">
       <h3 style="margin:0 0 6px">Recibos por correo (Gmail CONTAX)</h3>
@@ -816,16 +795,6 @@ Contacto: …">${escape(cfg.aiContext || "")}</textarea>
   el("c_csave").onclick = async () => {
     const msg = el("c_cmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
     try { await setDoc(doc(db, "config", "app"), { company: el("c_company").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ Empresa guardada."; }
-    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
-  };
-  el("c_ssave").onclick = async () => {
-    const msg = el("c_smsg"); msg.className = "msg"; msg.textContent = "Guardando…";
-    try { await setDoc(doc(db, "config", "app"), { sheetUrl: el("c_sheet").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); msg.className = "msg ok"; msg.textContent = "✓ URL guardada."; }
-    catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
-  };
-  el("c_bdsave").onclick = async () => {
-    const msg = el("c_bdmsg"); msg.className = "msg"; msg.textContent = "Guardando…";
-    try { await setDoc(doc(db, "config", "app"), { bdUrl: el("c_bdurl").value.trim(), updatedAt: serverTimestamp() }, { merge: true }); bdUrlCache = ""; bdLoaded = false; msg.className = "msg ok"; msg.textContent = "✓ URL guardada. Abre la pestaña Base de Datos."; }
     catch (e) { msg.className = "msg err"; msg.textContent = "Error: " + (e.code || e.message); }
   };
   el("c_recibossave").onclick = async () => {
@@ -1431,7 +1400,7 @@ function paintBaseDatos() {
     <p class="lead">${bdEnFirebaseFlag ? `Base de datos de clientes en Firebase (rápida), con las ${bdHeader.length} columnas.` : `Tu hoja <b>BDCONTAX</b>de Google Sheets, con las ${bdHeader.length} columnas tal cual.`}</p>
     <div class="subtabs">
       <button class="subtab ${bdSubtab === 'resumen' ? 'on' : ''}" data-st="resumen">Resumen</button>
-      <button class="subtab ${bdSubtab === 'general' ? 'on' : ''}" data-st="general">General (${total})</button>
+      <button class="subtab ${bdSubtab === 'general' ? 'on' : ''}" data-st="general">Base de Datos (${total})</button>
       <button class="subtab ${bdSubtab === 'activos' ? 'on' : ''}" data-st="activos">Activos (${counts.activo})</button>
       <button class="subtab ${bdSubtab === 'otros' ? 'on' : ''}" data-st="otros">Otros estados (${total - counts.activo})</button>
       <button class="subtab ${bdSubtab === 'movimientos' ? 'on' : ''}" data-st="movimientos">Movimientos</button>
@@ -1576,7 +1545,7 @@ function openBDModal(row) {
   const groupsHtml = BD_GROUPS.map(g => {
     const fields = BD_FIELDS.filter(f =>f[2] === g);
     const inputs = fields.map(([key, label, , type]) => {
-      const val = escape(row ? (row[label] != null ? row[label] : "") : "");
+      const val = escape(row ? bdV(row, key) : "");
       const dis = canEdit ? "" : "disabled";
       if (type === "textarea") return `<div class="field" style="grid-column:1/-1"><label>${escape(label)}</label><textarea id="bf_${key}" style="min-height:70px" ${dis}>${val}</textarea></div>`;
       if (type === "secret") return `<div class="field"><label>${escape(label)}</label><input id="bf_${key}" type="password" value="${val}" ${dis}><span class="reveal note" data-rev="bf_${key}" style="font-size:11px">mostrar</span></div>`;
@@ -2726,9 +2695,9 @@ async function ocrComprobanteGemini(dataUrl) {
   const cfg = await loadConfigDoc();
   let key = (cfg.visionKey || "").trim();
   const mainKey = (cfg.aiKey || cfg.geminiKey || "").trim();
-  if (!key && /^AIza/.test(mainKey)) key = mainKey;
+  // Usa la clave de visión; si no hay, usa la principal (sea cual sea su formato).
+  if (!key) key = mainKey;
   if (!key) return { error: "Falta una clave de Gemini para leer comprobantes. Ponla en Configuración → IA → 'Clave de Gemini para leer comprobantes'." };
-  if (!/^AIza/.test(key)) return { error: "La clave de comprobantes debe ser de Gemini (empieza con AIza…)." };
   const mime = (dataUrl.match(/^data:([^;]+);base64,/) || [])[1] || "image/jpeg";
   const b64 = dataUrl.replace(/^data:[^;]+;base64,/, "");
   if (!b64) return { error: "No hay imagen." };

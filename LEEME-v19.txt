@@ -1,0 +1,36 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v19
+===============================================================
+
+1) "General" ahora se llama "Base de Datos"
+   En la pestaña Clientes, la subpestaña General pasó a llamarse
+   "Base de Datos".
+
+2) EDITAR CLIENTE — ahora salen TODOS los datos
+   Arreglado: al tocar "Editar" en la Base de Datos, el formulario ahora
+   muestra todos los datos del cliente (antes aparecían en blanco porque
+   leía mal los nombres de columna con el prefijo "20." etc.). Ya puedes
+   corregir cualquier campo y guardar.
+
+3) EGRESOS / comprobante con IA — clave de Gemini
+   Ya NO exige que la clave empiece con "AIza". Si sacaste tu API key de
+   https://aistudio.google.com/api-keys, pégala tal cual en
+   Configuración → IA → "Clave de Gemini para leer comprobantes" (o usa
+   la principal si ya es Gemini). El lector la usa directamente; si la
+   clave fuera inválida, Google te devolverá el error real.
+   (El mismo arreglo va en el CRM, en el paquete acumulado para Edge.)
+
+4) RESPUESTAS RÁPIDAS — 100% en Firebase
+   Las respuestas ya se guardan solo en la nube (Firebase) y se comparten
+   al instante con todo el equipo. Se quitó la dependencia del Google
+   Sheet de CHATBOT (y el botón "Importar de Google Sheets").
+   En Configuración → Conexiones se quitaron las URLs de "Google Sheets
+   (respuestas)" y de "Base de Datos (BDCONTAX)", porque ya no hacen
+   falta: ambas viven en Firebase. Solo queda la URL de Recibos por correo.
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v19 (súbelo a GitHub)
+ - LEEME-v19.txt
+Sin cambios en las reglas de Firestore.
+===============================================================
