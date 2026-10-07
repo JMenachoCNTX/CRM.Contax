@@ -1,0 +1,46 @@
+===============================================================
+ NUMMEROS by CONTAX — PANEL v21 + PORTAL DEL CLIENTE (demo)
+===============================================================
+
+1) INICIO con el logo nuevo
+   La pestaña Inicio ahora muestra el logo de NUMMEROS (tu imagen),
+   grande y centrado. Se ve verde en tema claro y claro en tema oscuro.
+
+2) LOGIN con diseño dividido
+   La pantalla de ingreso ahora es a dos mitades: a la izquierda el
+   formulario con el logo de NUMMEROS y la paleta verde; a la derecha una
+   imagen (por ahora un fondo verde con el logo de marca).
+   • Para cambiar esa imagen por una foto: en index.html busca la clase
+     ".loginhero" y reemplaza su "background" por:
+         background:url('TU-FOTO.jpg') center/cover;
+
+3) PORTAL DEL CLIENTE (demo) — archivo cliente.html
+   Es una página aparte (demo con datos de ejemplo) para que veas y afines
+   cómo quedará el portal donde tus clientes consultan su información.
+   • Acceso con el modelo que definiste:
+       - Repartidor (Yango/flotas): Celular + ID.
+       - Empresa / otros: NIT + contraseña = C.I.
+   • Al entrar, el cliente ve: sus Declaraciones (período, detalle,
+     estado y su formulario para descargar), sus Trámites (estado +
+     documento), su Facturación (mes/estado) y sus Documentos (NIT,
+     Matrícula, ROE, formularios) para descargar. Y un espacio para
+     SUBIR documentos (se habilita en la próxima versión).
+   • DATOS DE PRUEBA (están escritos en la misma pantalla):
+       - Repartidor → Celular 71234567 · ID R-1024
+       - Empresa    → NIT 1028457023 · C.I. 7412589
+   • IMPORTANTE: por ahora usa datos de EJEMPLO (no lee todavía la base
+     real). Es a propósito, para afinar el diseño sin tocar la seguridad.
+     Cuando quieras, lo conectamos a los datos reales (desde el puente
+     Apps Script del portal actual de CONTAX, o migrándolo a Firebase) y
+     le ponemos las seguridades correspondientes antes de lanzarlo.
+
+   Para probarlo ya: sube cliente.html a GitHub junto con lo demás y
+   ábrelo en  …/cliente.html
+
+ARCHIVOS
+--------
+ - index.html, app.js, config.js   → Panel v21 (súbelo a GitHub)
+ - cliente.html                     → Portal del Cliente (demo)
+ - LEEME-v21.txt
+Sin cambios en las reglas de Firestore.
+===============================================================

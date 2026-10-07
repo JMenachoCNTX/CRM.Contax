@@ -3,7 +3,7 @@
 //  VERSIÓN 1  ·  2026-09-07
 //  Presencia · Reportes · Clientes · Base de Datos (Google Sheets) · IA
 // ============================================================
-const APP_VERSION = "20";
+const APP_VERSION = "21";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -205,8 +205,8 @@ async function renderInicio() {
   const nombre = escape((ME.name || ME.email || "").split(" ")[0] || "");
   el("v-inicio").innerHTML = `
     <div style="position:relative;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:40px 24px;min-height:min(72vh,620px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
-      <div style="color:var(--txt);width:min(86%,680px);margin:0 auto 10px">${LOGO_BYC}</div>
-      <h1 style="font-size:22px;margin:18px 0 6px;font-weight:600">${saludo}, ${nombre}.</h1>
+      <div class="numm-logo" style="width:min(78%,560px);aspect-ratio:852/398;margin:0 auto 6px"></div>
+      <h1 style="font-size:22px;margin:22px 0 6px;font-weight:600">${saludo}, ${nombre}.</h1>
       <p class="lead" style="margin:0;color:var(--muted)">Bienvenido a tu sistema NUMMEROS by CONTAX.</p>
     </div>`;
 }
